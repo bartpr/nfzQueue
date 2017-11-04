@@ -6,5 +6,5 @@ target
 /.project
 /.settings
 /RUNNING_PID
-/project/plugins.sbt
-/project/build.sbt
+project/plugins.sbt
+project/build.properities
