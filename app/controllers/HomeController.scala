@@ -1,6 +1,5 @@
 package controllers
 
-import java.util.concurrent.TimeUnit
 import javax.inject._
 
 import akka.actor._
@@ -13,6 +12,10 @@ import scala.concurrent.Future
  * This controller creates an `Action` to handle HTTP requests to the
  * application's home page.
  */
+
+object HomeController{
+
+}
 @Singleton
 class HomeController @Inject()(cc: ControllerComponents) extends AbstractController(cc) {
 
