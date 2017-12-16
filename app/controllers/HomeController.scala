@@ -62,6 +62,7 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
       }
       channel.basicConsume(queue, true, consumer)
     }
+
     connection ! CreateChannel(ChannelActor.props(setupSubscriber), Some("subscriber"))
 
     import scala.concurrent.ExecutionContext.global
@@ -81,7 +82,7 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
     }(global)
 
     def fromBytes(x: Array[Byte]) = new String(x, "UTF-8")
-    def toBytes(x: Long) = x.toString.getBytes("UTF-8")
+    def toBytes(x: Long): Array[Byte] = x.toString.getBytes("UTF-8")
 
 
     System.out.println("Hello world")
