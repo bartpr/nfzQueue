@@ -2,7 +2,8 @@ package services.Users
 
 import akka.actor.{ActorRef, ActorSelection, ActorSystem}
 import com.newmotion.akka.rabbitmq.{Channel, ChannelActor, ChannelMessage, CreateChannel}
-import services.IdStore
+import services.Messages.Message
+import services.{IdStore, MqRabbitEndpoint}
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -10,7 +11,7 @@ import scala.concurrent.duration.Duration
 class Client(val clientOwner: ClientOwner)
                      (implicit system: ActorSystem,
                       connection: ActorRef,
-                      exchange: String ) {
+                      exchange: String ) extends MqRabbitEndpoint{
 
   val id: Long = Client.getNewNumber
 
@@ -20,11 +21,11 @@ class Client(val clientOwner: ClientOwner)
     connection ! CreateChannel(ChannelActor.props(setupPublisher), Some(name))
   }
 
-  def publish_msg(msg: Long): Unit = {
+  def publish_msg(msg: Message, queueName: String): Unit = {
     val publisher: ActorSelection = system.actorSelection("/user/rabbitmq/" + name)
 
     def publish(channel: Channel) = {
-      channel.basicPublish(exchange, "", null, toBytes(msg))
+      channel.basicPublish(exchange, queueName, null, toBytes(msg))
     }
     publisher ! ChannelMessage(publish, dropIfNoChannel = false)
   }

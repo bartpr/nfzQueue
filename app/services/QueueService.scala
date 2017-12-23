@@ -28,28 +28,20 @@ class QueueService(){
     queueOpt.isDefined
   }
 
-  def getNumber(from: Patient, queue: BussinessQueue) = {
-    val msg = Messages.Message.GetNumberMsg(from)
+  def nextNumberToDoc(from: Doctor, queueId: Long): Boolean = {
+    val queueOpt = QueueMap.find(_.id == queueId)
+    queueOpt.foreach(nextNumberToDoc(from, _))
+    queueOpt.isDefined
+  }
 
-//    System.out.println(msg)
-    val byteArrayOutputStream = new ByteArrayOutputStream()
-    val oos = new ObjectOutputStream(byteArrayOutputStream)
-    oos.writeObject(msg)
-    oos.close()
-    val tab = byteArrayOutputStream.toByteArray
-//    System.out.println(tab)
-    val input = new ByteArrayInputStream(tab)
-    val ois = new ObjectInputStream(input)
-    val msgOut = ois.readObject.asInstanceOf[Messages.Message]
-//    System.out.println(msgOut.from.asInstanceOf[Patient].userId)
-    ois.close
+  def getNumber(patient: Patient, queue: BussinessQueue) = {
     Future{
-      new Client(from)
+      new Client(patient)
     }.onComplete {
       case Success(cli) =>
         Future {
           def loop(n: Long) {
-            cli.publish_msg(n)
+            cli.publish_msg(Messages.Message.GetNumberMsg(patient), queue.name)
             Thread.sleep(1000)
             loop(n + 1)
           }
@@ -59,7 +51,21 @@ class QueueService(){
     }
   }
 
-  def nextNumberToDoc() = ???
+  def nextNumberToDoc(from: Doctor, queue: BussinessQueue) = Future{
+    new Client(from)
+  }.onComplete {
+    case Success(cli) =>
+      Future {
+        def loop(n: Long) {
+          cli.publish_msg(Messages.Message.NextPlease(from), queue.name)
+          Thread.sleep(3000)
+          loop(n + 1)
+        }
+        loop(0)
+      }
+    case Failure(exp) => throw exp
+  }
+
   def estimateVisitTime() = ???
   def estimateFirstAvailableShift() = ???
   def producePatiencesFromDB() = ???
@@ -82,10 +88,19 @@ object QueueService{
     val service = new QueueService
     System.out.println("Hello")
     val p1 = new Patient(1L)
+    val p2 = new Patient(2L)
+    val d1 = new Doctor(1L, Seq.empty)
+    val d2 = new Doctor(2L, Seq.empty)
     Future {
-      service.createNewQueue()
+      val queue1 = service.createNewQueue()
+      val queue2 = service.createNewQueue()
+      (queue1, queue2)
     }.onComplete{
-      case Success(num) => service.getNumber(p1, num)
+      case Success(num) =>
+        service.getNumber(p1, num._1)
+        service.nextNumberToDoc(d2, num._1)
+        service.getNumber(p1, num._2)
+        service.nextNumberToDoc(d2, num._2)
       case Failure(exp) => throw exp
     }
   }
