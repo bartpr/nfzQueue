@@ -15,7 +15,7 @@ class Client(val clientOwner: ClientOwner)
 
   val id: Long = Client.getNewNumber
 
-  val name: String = typeName + "-" + id.toString
+  override val name: String = typeName + "-" + id.toString
 
   locally {
     connection ! CreateChannel(ChannelActor.props(setupPublisher), Some(name))

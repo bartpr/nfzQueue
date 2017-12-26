@@ -1,13 +1,15 @@
 package services
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
+import java.util.concurrent.TimeUnit
 import javax.inject._
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem}
 import services.Queues.{BussinessQueue, PublicQueue}
 import services.Users._
 
 import scala.collection.mutable
-import scala.concurrent.Future
+import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 
@@ -16,9 +18,14 @@ class QueueService(){
   import com.newmotion.akka.rabbitmq._
   implicit val system = ActorSystem()
   val factory = new ConnectionFactory()
-  implicit val connection = system.actorOf(ConnectionActor.props(factory), "rabbitmq")
-  implicit val exchange = "amq.fanout"
-  implicit val ec = scala.concurrent.ExecutionContext.Implicits.global
+  val temp = system.actorOf(ConnectionActor.props(factory), "rabbitmq")
+
+  implicit val connection: ActorRef = Await.result(
+    system.actorSelection(temp.path.toStringWithoutAddress).resolveOne(FiniteDuration.apply(1, TimeUnit.HOURS)),
+    Duration(10, TimeUnit.SECONDS)
+  )
+  implicit val exchange: String = "amq.fanout"
+  implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
 
   var QueueMap: mutable.Seq[BussinessQueue] = mutable.Seq.empty[BussinessQueue]
 
@@ -40,28 +47,18 @@ class QueueService(){
     }.onComplete {
       case Success(cli) =>
         Future {
-          def loop(n: Long) {
-            cli.publish_msg(Messages.Message.GetNumberMsg(patient), queue.name)
-            Thread.sleep(1000)
-            loop(n + 1)
-          }
-          loop(0)
+          cli.publish_msg(Messages.Message.GetNumberMsg(patient), queue.name)
         }
       case Failure(exp) => throw exp
     }
   }
 
-  def nextNumberToDoc(from: Doctor, queue: BussinessQueue) = Future{
+  def nextNumberToDoc(from: Doctor, queue: BussinessQueue) = Future {
     new Client(from)
   }.onComplete {
     case Success(cli) =>
       Future {
-        def loop(n: Long) {
-          cli.publish_msg(Messages.Message.NextPlease(from), queue.name)
-          Thread.sleep(3000)
-          loop(n + 1)
-        }
-        loop(0)
+        cli.publish_msg(Messages.Message.NextPlease(from), queue.name)
       }
     case Failure(exp) => throw exp
   }
@@ -97,6 +94,7 @@ object QueueService{
       (queue1, queue2)
     }.onComplete{
       case Success(num) =>
+        Thread.sleep(1000)
         service.getNumber(p1, num._1)
         service.nextNumberToDoc(d2, num._1)
         service.getNumber(p1, num._2)

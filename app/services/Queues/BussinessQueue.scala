@@ -1,9 +1,11 @@
 package services.Queues
 
+import java.util.concurrent.ConcurrentLinkedQueue
+
 import akka.actor.{ActorRef, ActorSystem}
 import com.newmotion.akka.rabbitmq.{BasicProperties, Channel, ChannelActor, CreateChannel, DefaultConsumer, Envelope}
 import services.Messages.Message
-import services.Users.{ClientOwner}
+import services.Users.ClientOwner
 import services.{IdStore, MqRabbitEndpoint}
 
 import scala.collection.mutable
@@ -14,9 +16,9 @@ abstract class BussinessQueue()(implicit system: ActorSystem,
                                 connection: ActorRef,
                                 exchange: String ) extends MqRabbitEndpoint{
   val id: Long = Await.result( BussinessQueue.idStore.getNew, Duration.Inf)
-  val name: String = s"queue-$id"
+  override val name: String = s"queue-$id"
 
-  private var queueMap: mutable.Queue[(Long, ClientOwner)] = mutable.Queue[(Long, ClientOwner)]()
+  private var queueMap: ConcurrentLinkedQueue[(Long, ClientOwner)] = new ConcurrentLinkedQueue[(Long, ClientOwner)]()
   private val numbers = new IdStore()
 
   private def setupSubscriber(channel: Channel, self: ActorRef) {
@@ -26,12 +28,12 @@ abstract class BussinessQueue()(implicit system: ActorSystem,
       override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) {
         fromBytes(body) match {
           case Message.GetNumberMsg(patient) => {
-            queueMap += Await.result(numbers.getNew, Duration.Inf) -> patient
+            queueMap.add(Await.result(numbers.getNew, Duration.Inf) -> patient)
             System.out.println("new patient get a number")
           }
           case Message.NextPlease(doctor) =>
             if(!queue.isEmpty)
-              System.out.println("doctor get a patient" + queueMap.dequeue())
+              System.out.println("doctor get a patient" + queueMap.poll())
         }
       }
     }

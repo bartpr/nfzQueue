@@ -21,4 +21,8 @@ trait MqRabbitEndpoint{
     byteArrayOutputStream.toByteArray
   }
 
+  def name: String
+//  def publish_msg: Unit
+
+
 }
