@@ -6,6 +6,7 @@ import akka.actor.{ActorRef, ActorSelection, ActorSystem}
 import akka.pattern.Patterns
 import akka.util.Timeout
 import com.newmotion.akka.rabbitmq.{BasicProperties, Channel, ChannelActor, ChannelMessage, CreateChannel, DefaultConsumer, Envelope}
+import com.rabbitmq.client.AMQP.BasicProperties
 import services.Messages.Message
 import services.{IdStore, MqRabbitEndpoint}
 
@@ -23,21 +24,17 @@ class Client(val clientOwner: ClientOwner)
 
   override val name: String = typeName + "-" + id.toString
 
-  def createChannel(): Future[AnyRef] =
-    Patterns.ask(connection, CreateChannel(ChannelActor.props(setupPublisher), Some(name)), new Timeout(Duration.apply(10, TimeUnit.SECONDS)))
-
-
   def publish_msg(msg: Message, queueName: String): Unit = {
     val publisher: ActorSelection = system.actorSelection("/user/rabbitmq/" + name)
 
 
     def publish(channel: Channel) = {
-      channel.basicPublish(exchange, queueName, null, toBytes(msg))
+      channel.basicPublish(exchange, queueName, new BasicProperties.Builder().replyTo(name).build(), toBytes(msg))
     }
     publisher ! ChannelMessage(publish, dropIfNoChannel = false)
   }
 
-  def setupPublisher(channel: Channel, self: ActorRef) {
+  override def setupChannel(channel: Channel, self: ActorRef) {
     val queue = channel.queueDeclare().getQueue
     channel.queueBind(queue, exchange, "")
 //    val consumer = new DefaultConsumer(channel) {

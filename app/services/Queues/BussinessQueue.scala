@@ -20,30 +20,28 @@ abstract class BussinessQueue()(implicit system: ActorSystem,
   private var queueMap: ConcurrentLinkedQueue[(Long, ClientOwner)] = new ConcurrentLinkedQueue[(Long, ClientOwner)]()
   private val numbers = new IdStore()
 
-  private def setupSubscriber(channel: Channel, self: ActorRef) {
-    val queue = channel.queueDeclare().getQueue
+  override def setupChannel(channel: Channel, self: ActorRef) {
+    //channel.exchangeDeclare(exchange, "direct")
+    val queue = channel.queueDeclare(name, false, false, false, null).getQueue
     channel.queueBind(queue, exchange, name)
     val consumer = new DefaultConsumer(channel) {
       override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) {
-        fromBytes(body) match {
-          case Message.GetNumberMsg(patient) => {
-            queueMap.add(Await.result(numbers.getNew, Duration.Inf) -> patient)
-            System.out.println("new patient get a number")
+          fromBytes(body) match {
+            case Message.GetNumberMsg(patient) => {
+              queueMap.add(Await.result(numbers.getNew, Duration.Inf) -> patient)
+              System.out.println(s" $name new patient get a number")
+            }
+            case Message.NextPlease(doctor) =>
+              if (queueMap.isEmpty)
+                println("empty queue")
+              else
+                System.out.println(s"$name doctor get a patient" + queueMap.poll())
           }
-          case Message.NextPlease(doctor) =>
-            if(queueMap.isEmpty)
-              println("empty queue")
-            else
-              System.out.println("doctor get a patient" + queueMap.poll())
-
-        }
-        //channel.basicPublish(exchange, properties.getReplyTo, null, "pleple".getBytes("UTF-8"))
+          channel.basicPublish(exchange, properties.getReplyTo, null, "pleple".getBytes("UTF-8"))
       }
     }
     channel.basicConsume(queue, true, consumer)
   }
-
-  connection ! CreateChannel(ChannelActor.props(setupSubscriber), Some(name))
 
 
   private def fromLongBytes(x: Array[Byte]) = new String(x, "UTF-8")

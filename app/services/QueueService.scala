@@ -17,13 +17,14 @@ class QueueService(){
   import com.newmotion.akka.rabbitmq._
   implicit val system = ActorSystem()
   val factory = new ConnectionFactory()
-  val temp = system.actorOf(ConnectionActor.props(factory), "rabbitmq")
+  val temp: ActorRef = system.actorOf(ConnectionActor.props(factory), "rabbitmq")
 
   implicit val connection: ActorRef = Await.result(
     system.actorSelection(temp.path.toStringWithoutAddress).resolveOne(FiniteDuration.apply(1, TimeUnit.HOURS)),
     Duration(10, TimeUnit.SECONDS)
   )
-  implicit val exchange: String = "amq.fanout"
+
+  implicit val exchange: String = "amq.direct"
   implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
 
   var QueueMap: mutable.Seq[BussinessQueue] = mutable.Seq.empty[BussinessQueue]
@@ -67,10 +68,10 @@ class QueueService(){
   def producePatiencesFromDB() = ???
   def savePatiencesToDB() = ???
 
-  def createNewQueue(): Future[PublicQueue] = Future {
+  def createNewQueue(): Future[PublicQueue] = {
     val pq = new PublicQueue()
     QueueMap = QueueMap :+ pq
-    pq
+    pq.createChannel.map(_ => pq)
   }
 
   def deleteQueue = ???
@@ -79,7 +80,7 @@ class QueueService(){
 }
 
 object QueueService{
-  implicit val ec = scala.concurrent.ExecutionContext.Implicits.global
+  implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
   def main(args: Array[String]): Unit = {
     val service = new QueueService
     System.out.println("Hello")
