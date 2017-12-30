@@ -31,8 +31,11 @@ abstract class BussinessQueue()(implicit system: ActorSystem,
             System.out.println("new patient get a number")
           }
           case Message.NextPlease(doctor) =>
-            if(!queue.isEmpty)
+            if(queueMap.isEmpty)
+              println("empty queue")
+            else
               System.out.println("doctor get a patient" + queueMap.poll())
+
         }
         //channel.basicPublish(exchange, properties.getReplyTo, null, "pleple".getBytes("UTF-8"))
       }

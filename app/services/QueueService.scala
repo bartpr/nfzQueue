@@ -1,5 +1,4 @@
 package services
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
 import java.util.concurrent.TimeUnit
 import javax.inject._
 
@@ -92,7 +91,6 @@ object QueueService{
     val queue2 = service.createNewQueue().map(_.id)
       Future.sequence(Seq(queue1, queue2)).onComplete{
       case Success(num) =>
-//        Thread.sleep(1000)
         service.getNumber(p1, num(0))
         service.nextNumberToDoc(d2, num(0))
         service.getNumber(p1, num(1))
