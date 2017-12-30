@@ -8,7 +8,6 @@ import services.Messages.Message
 import services.Users.ClientOwner
 import services.{IdStore, MqRabbitEndpoint}
 
-import scala.collection.mutable
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
@@ -35,6 +34,7 @@ abstract class BussinessQueue()(implicit system: ActorSystem,
             if(!queue.isEmpty)
               System.out.println("doctor get a patient" + queueMap.poll())
         }
+        //channel.basicPublish(exchange, properties.getReplyTo, null, "pleple".getBytes("UTF-8"))
       }
     }
     channel.basicConsume(queue, true, consumer)

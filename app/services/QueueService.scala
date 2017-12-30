@@ -42,10 +42,9 @@ class QueueService(){
   }
 
   def getNumber(patient: Patient, queue: BussinessQueue) = {
-    Future{
-      new Client(patient)
-    }.onComplete {
-      case Success(cli) =>
+    val cli = new Client(patient)
+    cli.createChannel().onComplete {
+      case Success(_) =>
         Future {
           cli.publish_msg(Messages.Message.GetNumberMsg(patient), queue.name)
         }
@@ -53,14 +52,15 @@ class QueueService(){
     }
   }
 
-  def nextNumberToDoc(from: Doctor, queue: BussinessQueue) = Future {
-    new Client(from)
-  }.onComplete {
-    case Success(cli) =>
-      Future {
-        cli.publish_msg(Messages.Message.NextPlease(from), queue.name)
-      }
-    case Failure(exp) => throw exp
+  def nextNumberToDoc(from: Doctor, queue: BussinessQueue) = {
+    val cli = new Client(from)
+    cli.createChannel().onComplete {
+      case Success(_) =>
+        Future {
+          cli.publish_msg(Messages.Message.NextPlease(from), queue.name)
+        }
+      case Failure(exp) => throw exp
+    }
   }
 
   def estimateVisitTime() = ???
@@ -68,10 +68,10 @@ class QueueService(){
   def producePatiencesFromDB() = ???
   def savePatiencesToDB() = ???
 
-  def createNewQueue(): Long = {
+  def createNewQueue(): Future[PublicQueue] = Future {
     val pq = new PublicQueue()
     QueueMap = QueueMap :+ pq
-    pq.id
+    pq
   }
 
   def deleteQueue = ???
@@ -88,17 +88,15 @@ object QueueService{
     val p2 = new Patient(2L)
     val d1 = new Doctor(1L, Seq.empty)
     val d2 = new Doctor(2L, Seq.empty)
-    Future {
-      val queue1 = service.createNewQueue()
-      val queue2 = service.createNewQueue()
-      (queue1, queue2)
-    }.onComplete{
+    val queue1 = service.createNewQueue().map(_.id)
+    val queue2 = service.createNewQueue().map(_.id)
+      Future.sequence(Seq(queue1, queue2)).onComplete{
       case Success(num) =>
-        Thread.sleep(1000)
-        service.getNumber(p1, num._1)
-        service.nextNumberToDoc(d2, num._1)
-        service.getNumber(p1, num._2)
-        service.nextNumberToDoc(d2, num._2)
+//        Thread.sleep(1000)
+        service.getNumber(p1, num(0))
+        service.nextNumberToDoc(d2, num(0))
+        service.getNumber(p1, num(1))
+        service.nextNumberToDoc(d2, num(1))
       case Failure(exp) => throw exp
     }
   }

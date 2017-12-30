@@ -1,28 +1,35 @@
 package services.Users
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.{ActorRef, ActorSelection, ActorSystem}
-import com.newmotion.akka.rabbitmq.{Channel, ChannelActor, ChannelMessage, CreateChannel}
+import akka.pattern.Patterns
+import akka.util.Timeout
+import com.newmotion.akka.rabbitmq.{BasicProperties, Channel, ChannelActor, ChannelMessage, CreateChannel, DefaultConsumer, Envelope}
 import services.Messages.Message
 import services.{IdStore, MqRabbitEndpoint}
 
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.duration.{Duration, FiniteDuration}
 
 class Client(val clientOwner: ClientOwner)
                      (implicit system: ActorSystem,
                       connection: ActorRef,
-                      exchange: String ) extends MqRabbitEndpoint{
+                      exchange: String,
+                      ec: ExecutionContext) extends MqRabbitEndpoint{
+
 
   val id: Long = Client.getNewNumber
 
   override val name: String = typeName + "-" + id.toString
 
-  locally {
-    connection ! CreateChannel(ChannelActor.props(setupPublisher), Some(name))
-  }
+  def createChannel(): Future[AnyRef] =
+    Patterns.ask(connection, CreateChannel(ChannelActor.props(setupPublisher), Some(name)), new Timeout(Duration.apply(10, TimeUnit.SECONDS)))
+
 
   def publish_msg(msg: Message, queueName: String): Unit = {
     val publisher: ActorSelection = system.actorSelection("/user/rabbitmq/" + name)
+
 
     def publish(channel: Channel) = {
       channel.basicPublish(exchange, queueName, null, toBytes(msg))
@@ -33,9 +40,13 @@ class Client(val clientOwner: ClientOwner)
   def setupPublisher(channel: Channel, self: ActorRef) {
     val queue = channel.queueDeclare().getQueue
     channel.queueBind(queue, exchange, "")
+//    val consumer = new DefaultConsumer(channel) {
+//      override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) {
+//        println(fromBytes(body) + "lelele")
+//      }
+//    }
+//    channel.basicConsume(queue, true, consumer)
   }
-
-
 
 
 
