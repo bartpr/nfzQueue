@@ -1,18 +1,9 @@
 package services.Queues
 
 import akka.actor.{ActorRef, ActorSystem}
-
-class PublicQueue(implicit system: ActorSystem,
-                  connection: ActorRef,
-                  exchange: String ) extends BussinessQueue() {
-
-
-
-  override def putOnTheEnd(): Unit = ???
-
-  override def getFirst(): Unit = ???
-
-  override def getAll(): Unit = ???
-
-  override def putInitialPatients(): Unit = ???
+@SerialVersionUID(112448276L)
+sealed trait ClinicQueue extends Product with Serializable {
+  def id: Long
 }
+
+case class PublicQueue(id: Long) extends ClinicQueue

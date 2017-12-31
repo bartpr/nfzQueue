@@ -3,7 +3,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject._
 
 import akka.actor.{ActorRef, ActorSystem}
-import services.Queues.{BussinessQueue, PublicQueue}
+import services.Queues.{ClinicQueue, PublicQueue, RPCQueue}
 import services.Users._
 
 import scala.collection.mutable
@@ -27,21 +27,21 @@ class QueueService(){
   implicit val exchange: String = "amq.direct"
   implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
 
-  var QueueMap: mutable.Seq[BussinessQueue] = mutable.Seq.empty[BussinessQueue]
+  var RPCQueueMap: mutable.Seq[RPCQueue] = mutable.Seq.empty[RPCQueue]
 
   def getNumber(from: Patient, queueId: Long): Boolean = {
-    val queueOpt = QueueMap.find(_.id == queueId)
+    val queueOpt = RPCQueueMap.find(_.id == queueId)
     queueOpt.foreach(getNumber(from, _))
     queueOpt.isDefined
   }
 
   def nextNumberToDoc(from: Doctor, queueId: Long): Boolean = {
-    val queueOpt = QueueMap.find(_.id == queueId)
+    val queueOpt = RPCQueueMap.find(_.id == queueId)
     queueOpt.foreach(nextNumberToDoc(from, _))
     queueOpt.isDefined
   }
 
-  def getNumber(patient: Patient, queue: BussinessQueue) = {
+  def getNumber(patient: Patient, queue: RPCQueue) = {
     val cli = new Client(patient)
     cli.createChannel().onComplete {
       case Success(_) =>
@@ -52,7 +52,7 @@ class QueueService(){
     }
   }
 
-  def nextNumberToDoc(from: Doctor, queue: BussinessQueue) = {
+  def nextNumberToDoc(from: Doctor, queue: RPCQueue) = {
     val cli = new Client(from)
     cli.createChannel().onComplete {
       case Success(_) =>
@@ -68,9 +68,9 @@ class QueueService(){
   def producePatiencesFromDB() = ???
   def savePatiencesToDB() = ???
 
-  def createNewQueue(): Future[PublicQueue] = {
-    val pq = new PublicQueue()
-    QueueMap = QueueMap :+ pq
+  def createNewQueue(clinicQueue: ClinicQueue): Future[RPCQueue] = {
+    val pq = new RPCQueue(clinicQueue)
+    RPCQueueMap = RPCQueueMap :+ pq
     pq.createChannel.map(_ => pq)
   }
 
@@ -88,12 +88,14 @@ object QueueService{
     val p2 = new Patient(2L)
     val d1 = new Doctor(1L, Seq.empty)
     val d2 = new Doctor(2L, Seq.empty)
-    val queue1 = service.createNewQueue().map(_.id)
-    val queue2 = service.createNewQueue().map(_.id)
+    val queue1 = service.createNewQueue(PublicQueue(1)).map(_.id)
+    val queue2 = service.createNewQueue(PublicQueue(2)).map(_.id)
       Future.sequence(Seq(queue1, queue2)).onComplete{
       case Success(num) =>
+
         service.getNumber(p1, num(0))
-        service.nextNumberToDoc(d2, num(0))
+        service.getNumber(p2, num(0))
+        service.nextNumberToDoc(d2, num(1))
         service.getNumber(p1, num(1))
         service.nextNumberToDoc(d2, num(1))
       case Failure(exp) => throw exp

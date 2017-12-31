@@ -1,13 +1,12 @@
 package services.Users
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import akka.actor.{ActorRef, ActorSelection, ActorSystem}
-import akka.pattern.Patterns
-import akka.util.Timeout
 import com.newmotion.akka.rabbitmq.{BasicProperties, Channel, ChannelActor, ChannelMessage, CreateChannel, DefaultConsumer, Envelope}
 import com.rabbitmq.client.AMQP.BasicProperties
 import services.Messages.Message
+import services.Messages.Message.Response
 import services.{IdStore, MqRabbitEndpoint}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -22,6 +21,8 @@ class Client(val clientOwner: ClientOwner)
 
   val id: Long = Client.getNewNumber
 
+  val responseQueue = new ConcurrentLinkedQueue[Response]
+
   override val name: String = typeName + "-" + id.toString
 
   def publish_msg(msg: Message, queueName: String): Unit = {
@@ -31,18 +32,33 @@ class Client(val clientOwner: ClientOwner)
     def publish(channel: Channel) = {
       channel.basicPublish(exchange, queueName, new BasicProperties.Builder().replyTo(name).build(), toBytes(msg))
     }
+
     publisher ! ChannelMessage(publish, dropIfNoChannel = false)
   }
 
   override def setupChannel(channel: Channel, self: ActorRef) {
-    val queue = channel.queueDeclare().getQueue
-    channel.queueBind(queue, exchange, "")
-//    val consumer = new DefaultConsumer(channel) {
-//      override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) {
-//        println(fromBytes(body) + "lelele")
-//      }
-//    }
-//    channel.basicConsume(queue, true, consumer)
+    val queue = channel.queueDeclare(name, false, false, false, null).getQueue
+    channel.queueBind(queue, exchange, name)
+
+    val consumer = new DefaultConsumer(channel) {
+      override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) {
+        val clientStr = clientOwner match {
+          case doc: Doctor => s"doctor-${doc.userId}"
+          case patient: Patient => s"patient-${patient.userId}"
+          case database: Database => s"database"
+        }
+        val response = fromBytes(body).asInstanceOf[Response]
+        response match {
+          case Message.NextPatientIs(_, patientId) =>
+            println(s"[$name, $clientStr] Next Patient is ${patientId.getOrElse("freeTime")}")
+          case Message.YourNumberIs(_, number) =>
+            println(s"[$name, $clientStr] Your number is $number")
+        }
+        responseQueue.add(response)
+      }
+    }
+
+    channel.basicConsume(name, true, consumer)
   }
 
 
