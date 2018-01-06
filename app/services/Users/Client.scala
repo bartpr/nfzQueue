@@ -1,12 +1,12 @@
 package services.Users
 
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.{ArrayBlockingQueue, ConcurrentLinkedQueue}
 
 import akka.actor.{ActorRef, ActorSelection, ActorSystem}
 import com.newmotion.akka.rabbitmq.{BasicProperties, Channel, ChannelActor, ChannelMessage, CreateChannel, DefaultConsumer, Envelope}
 import com.rabbitmq.client.AMQP.BasicProperties
 import services.Messages.Message
-import services.Messages.Message.Response
+import services.Messages.Message.{Request, Response}
 import services.{IdStore, MqRabbitEndpoint}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -21,11 +21,24 @@ class Client(val clientOwner: ClientOwner)
 
   val id: Long = Client.getNewNumber
 
-  val responseQueue = new ConcurrentLinkedQueue[Response]
-
   override val name: String = typeName + "-" + id.toString
 
-  def publish_msg(msg: Message, queueName: String): Unit = {
+  val responseQueue = new ConcurrentLinkedQueue[Response]
+
+  def responseWaiter(req: Request, queueName: String): Future[Response] = {
+    publish_msg(req, queueName)
+    Future {
+      def loop(): Response = {
+        if(!responseQueue.isEmpty)
+          responseQueue.poll()
+        else
+          loop()
+      }
+      loop()
+    }
+  }
+
+  def publish_msg(msg: Message, queueName: String) = {
     val publisher: ActorSelection = system.actorSelection("/user/rabbitmq/" + name)
 
 
@@ -39,7 +52,6 @@ class Client(val clientOwner: ClientOwner)
   override def setupChannel(channel: Channel, self: ActorRef) {
     val queue = channel.queueDeclare(name, false, false, false, null).getQueue
     channel.queueBind(queue, exchange, name)
-
     val consumer = new DefaultConsumer(channel) {
       override def handleDelivery(consumerTag: String, envelope: Envelope, properties: BasicProperties, body: Array[Byte]) {
         val clientStr = clientOwner match {
@@ -57,11 +69,8 @@ class Client(val clientOwner: ClientOwner)
         responseQueue.add(response)
       }
     }
-
     channel.basicConsume(name, true, consumer)
   }
-
-
 
   private def typeName: String =
     clientOwner match {

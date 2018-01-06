@@ -3,6 +3,7 @@ import java.util.concurrent.TimeUnit
 import javax.inject._
 
 import akka.actor.{ActorRef, ActorSystem}
+import services.Messages.Message.{Request, Response}
 import services.Queues.{ClinicQueue, PublicQueue, RPCQueue}
 import services.Users._
 
@@ -29,38 +30,43 @@ class QueueService(){
 
   var RPCQueueMap: mutable.Seq[RPCQueue] = mutable.Seq.empty[RPCQueue]
 
-  def getNumber(from: Patient, queueId: Long): Boolean = {
+  def getNumber(from: Patient, queueId: Long): Future[Long] = {
     val queueOpt = RPCQueueMap.find(_.id == queueId)
-    queueOpt.foreach(getNumber(from, _))
-    queueOpt.isDefined
-  }
-
-  def nextNumberToDoc(from: Doctor, queueId: Long): Boolean = {
-    val queueOpt = RPCQueueMap.find(_.id == queueId)
-    queueOpt.foreach(nextNumberToDoc(from, _))
-    queueOpt.isDefined
-  }
-
-  def getNumber(patient: Patient, queue: RPCQueue) = {
-    val cli = new Client(patient)
-    cli.createChannel().onComplete {
-      case Success(_) =>
-        Future {
-          cli.publish_msg(Messages.Message.GetNumberMsg(patient), queue.name)
-        }
-      case Failure(exp) => throw exp
+    queueOpt.map(getNumber(from, _)) match {
+      case None => throw new IllegalStateException("No queue with these number present")
+      case Some(value) => value
     }
   }
 
-  def nextNumberToDoc(from: Doctor, queue: RPCQueue) = {
-    val cli = new Client(from)
-    cli.createChannel().onComplete {
-      case Success(_) =>
-        Future {
-          cli.publish_msg(Messages.Message.NextPlease(from), queue.name)
-        }
-      case Failure(exp) => throw exp
+  def nextNumberToDoc(from: Doctor, queueId: Long): Future[Option[Long]] = {
+    val queueOpt = RPCQueueMap.find(_.id == queueId)
+    queueOpt.map(nextNumberToDoc(from, _)) match {
+      case None => throw new IllegalStateException("No queue with these number present")
+      case Some(value) => value
     }
+  }
+
+  def getNumber(patient: Patient, queue: RPCQueue): Future[Long] = {
+    val client = new Client(patient)
+    getResponse(Messages.Message.GetNumberMsg(patient), client, queue).map {
+      case msg: Messages.Message.YourNumberIs =>
+        msg.number
+    }
+  }
+
+  def nextNumberToDoc(from: Doctor, queue: RPCQueue): Future[Option[Long]] = {
+    val client = new Client(from)
+    getResponse(Messages.Message.NextPlease(from), client, queue).map {
+        case msg: Messages.Message.NextPatientIs =>
+          msg.patientId
+      }
+  }
+
+
+  private def getResponse(req: Request, cli: Client, queue: RPCQueue): Future[Response] = {
+    cli.createChannel().flatMap( _ =>
+      cli.responseWaiter(req, queue.name)
+    )
   }
 
   def estimateVisitTime() = ???
@@ -82,6 +88,9 @@ class QueueService(){
 object QueueService{
   implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
   def main(args: Array[String]): Unit = {
+    def print(future: Future[Any]): Unit ={
+      println(Await.result(future, FiniteDuration(2, TimeUnit.SECONDS)))
+    }
     val service = new QueueService
     System.out.println("Hello")
     val p1 = new Patient(1L)
@@ -92,12 +101,11 @@ object QueueService{
     val queue2 = service.createNewQueue(PublicQueue(2)).map(_.id)
       Future.sequence(Seq(queue1, queue2)).onComplete{
       case Success(num) =>
-
-        service.getNumber(p1, num(0))
-        service.getNumber(p2, num(0))
-        service.nextNumberToDoc(d2, num(1))
-        service.getNumber(p1, num(1))
-        service.nextNumberToDoc(d2, num(1))
+        print(service.getNumber(p1, num(0)))
+        print(service.getNumber(p2, num(0)))
+        print(service.nextNumberToDoc(d2, num(1)))
+        print(service.getNumber(p1, num(1)))
+        print(service.nextNumberToDoc(d2, num(1)))
       case Failure(exp) => throw exp
     }
   }
