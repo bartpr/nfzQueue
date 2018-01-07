@@ -5,8 +5,12 @@ import javax.inject._
 import akka.actor._
 import com.rabbitmq.client.Channel
 import play.api.mvc._
-
+import services.QueueService
+import services.Queues.PublicQueue
+import services.Users.{Doctor, Patient}
 import scala.concurrent.Future
+import scala.util.{Failure, Success}
+import scala.concurrent.ExecutionContext.Implicits.global
 
 /**
  * This controller creates an `Action` to handle HTTP requests to the
@@ -17,7 +21,7 @@ object HomeController{
 
 }
 @Singleton
-class HomeController @Inject()(cc: ControllerComponents) extends AbstractController(cc) {
+class HomeController @Inject()(cc: ControllerComponents, service: QueueService) extends AbstractController(cc) {
 
   /**
    * Create an Action to render an HTML page with a welcome message.
@@ -83,6 +87,26 @@ class HomeController @Inject()(cc: ControllerComponents) extends AbstractControl
 
     def fromBytes(x: Array[Byte]) = new String(x, "UTF-8")
     def toBytes(x: Long): Array[Byte] = x.toString.getBytes("UTF-8")
+
+    System.out.println("Hello")
+    implicit val g = global
+    val p1 = new Patient(1L)
+    val p2 = new Patient(2L)
+    val d1 = new Doctor(1L, Seq.empty)
+    val d2 = new Doctor(2L, Seq.empty)
+    val queue1 = service.createNewQueue(PublicQueue(1)).map(_.id)
+    val queue2 = service.createNewQueue(PublicQueue(2)).map(_.id)
+    Future.sequence(Seq(queue1, queue2)).onComplete{
+      case Success(num) =>
+        print(service.getNumber(p1, num(0)))
+        print(service.getNumber(p2, num(0)))
+        print(service.nextNumberToDoc(d2, num(1)))
+        print(service.getNumber(p1, num(1)))
+        print(service.nextNumberToDoc(d2, num(1)))
+      case Failure(exp) => throw exp
+    }
+
+
 
 
     System.out.println("Hello world")
