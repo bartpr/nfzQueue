@@ -20,6 +20,7 @@ case class Ticket(ticketId: Long, clientOwner: ClientOwner)
 class RPCQueue(val clinicQueue: ClinicQueue)(implicit system: ActorSystem,
                  connection: ActorRef,
                  exchange: String ) extends MqRabbitEndpoint{
+
   val id: Long = Await.result( RPCQueue.idStore.getNew, Duration.Inf)
 
   override val name: String = s"queue-$id"
@@ -39,6 +40,8 @@ class RPCQueue(val clinicQueue: ClinicQueue)(implicit system: ActorSystem,
       .getOrElse(currentPatient.values().asScala.headOption)
     //todo: when more doctors -> Option to Seq
   }
+
+  def getAllTickets: Seq[Ticket] = queueMap.iterator.asScala.toSeq.map(ticket => Ticket(ticket._1, ticket._2))
 
   override def setupChannel(channel: Channel, self: ActorRef) {
     //channel.exchangeDeclare(exchange, "direct")
