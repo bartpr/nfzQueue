@@ -3,8 +3,9 @@ import java.util.concurrent.TimeUnit
 import javax.inject._
 
 import akka.actor.{ActorRef, ActorSystem}
+import org.joda.time.DateTime
 import services.Messages.Message.{Request, Response}
-import services.Queues.{ClinicQueue, PublicQueue, RPCQueue}
+import services.Queues.{ClinicQueue, PublicQueue, RPCQueue, Ticket}
 import services.Users._
 
 import scala.collection.mutable
@@ -19,6 +20,7 @@ class QueueService(){
   implicit val system = ActorSystem()
   val factory = new ConnectionFactory()
   val temp: ActorRef = system.actorOf(ConnectionActor.props(factory), "rabbitmq")
+  val MqRabbitPublicQueueIdStore: IdStore = new IdStore()
 
   implicit val connection: ActorRef = Await.result(
     system.actorSelection(temp.path.toStringWithoutAddress).resolveOne(FiniteDuration.apply(1, TimeUnit.HOURS)),
@@ -69,10 +71,59 @@ class QueueService(){
     )
   }
 
+  private def filterPublicMap(allQueueSeq: Seq[RPCQueue]): Seq[RPCQueue] = {
+    allQueueSeq.filter(_.clinicQueue match {
+      case _: PublicQueue => true
+      case _ => false
+    })
+  }
+
+  def getAllPublicQueues: Future[Seq[(ClinicQueue, Option[Ticket])]] = Future {
+    filterPublicMap(
+      collection.immutable.Seq(RPCQueueMap: _*)
+    ).map( RpcQueue =>
+      (RpcQueue.clinicQueue, RpcQueue.getCurrentTicket(None))
+    )
+  }
+
+  def getMyPublicQueues(patient: Patient): Future[Seq[ClinicQueue]] = Future {
+    filterPublicMap(
+      collection.immutable.Seq(
+        RPCQueueMap.filter(_.getQueueMapWithClient(patient)): _*
+      )
+    ).map(_.clinicQueue)
+  }
+
+  def getCurrentPatient(queueId: Long, doctor: Doctor) = {
+    RPCQueueMap.find(_.clinicQueue.id == queueId).map(
+      queue => queue.getCurrentTicket(Some(doctor))
+    )
+  }
+
   def estimateVisitTime() = ???
   def estimateFirstAvailableShift() = ???
   def producePatiencesFromDB() = ???
   def savePatiencesToDB() = ???
+
+  /* method only because of all queue's lifecycle is in MQRabbit
+  todo: creating new entity for planned queue
+  */
+  def getNewQueue(durationInHours: Int, doctors: Seq[Long], specializationId: Option[Long] = None): Future[PublicQueue] = {
+    if(specializationId.isDefined)
+      ??? //If specialization ID then private queue
+    else {
+      val now = new DateTime()
+      MqRabbitPublicQueueIdStore.getNew.map(
+        PublicQueue(
+          _,
+          now,
+          now.plusHours(durationInHours),
+          doctors
+        )
+      )
+    }
+  }
+
 
   def createNewQueue(clinicQueue: ClinicQueue): Future[RPCQueue] = {
     val pq = new RPCQueue(clinicQueue)
@@ -85,7 +136,7 @@ class QueueService(){
   private def consumePatient() = ???
 }
 
-object QueueService{
+/* object QueueService{
   implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
   def main(args: Array[String]): Unit = {
     def print(future: Future[Any]): Unit ={
@@ -110,4 +161,4 @@ object QueueService{
     }
   }
 
-}
+}*/

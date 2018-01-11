@@ -4,10 +4,12 @@ import javax.inject._
 
 import akka.actor._
 import com.rabbitmq.client.Channel
+import org.joda.time.DateTime
 import play.api.mvc._
 import services.QueueService
-import services.Queues.PublicQueue
+import services.Queues.{ClinicQueue, PublicQueue, Ticket}
 import services.Users.{Doctor, Patient}
+
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -38,7 +40,15 @@ class HomeController @Inject()(cc: ControllerComponents, service: QueueService) 
     channel.queueDeclare("queue_name", false, false, false, null)
   }
 
+  def createNewPublicQueue(durationInHours: Int, doctor: Doctor): Future[Long] = {
+    service.getNewQueue(durationInHours, Seq(doctor.userId)).flatMap( queue =>
+      service.createNewQueue(queue).map(_.id)
+    )
+  }
 
+  def getAllPublicQueues: Future[Seq[(ClinicQueue, Option[Ticket])]] = {
+    service.getAllPublicQueues
+  }
 
 
   def index = Action {
@@ -94,8 +104,8 @@ class HomeController @Inject()(cc: ControllerComponents, service: QueueService) 
     val p2 = new Patient(2L)
     val d1 = new Doctor(1L, Seq.empty)
     val d2 = new Doctor(2L, Seq.empty)
-    val queue1 = service.createNewQueue(PublicQueue(1)).map(_.id)
-    val queue2 = service.createNewQueue(PublicQueue(2)).map(_.id)
+    val queue1 = createNewPublicQueue(2, d1)
+    val queue2 = createNewPublicQueue(2, d2)
     Future.sequence(Seq(queue1, queue2)).onComplete{
       case Success(num) =>
         print(service.getNumber(p1, num(0)))
@@ -105,7 +115,6 @@ class HomeController @Inject()(cc: ControllerComponents, service: QueueService) 
         print(service.nextNumberToDoc(d2, num(1)))
       case Failure(exp) => throw exp
     }
-
 
 
 
