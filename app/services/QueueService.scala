@@ -2,7 +2,6 @@ package services
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import javax.inject._
 
-import akka.actor.Status.Success
 import scala.collection.JavaConverters._
 
 import akka.actor.{ActorRef, ActorSystem}
@@ -11,7 +10,6 @@ import services.Messages.Message.{Request, Response}
 import services.Queues.{ClinicQueue, PublicQueue, RPCQueue, Ticket}
 import services.Users._
 
-import scala.collection.mutable
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.{Await, ExecutionContext, Future}
 
@@ -94,16 +92,23 @@ class QueueService(){
     )
   }
 
-  def getMyPublicQueues(patient: Patient): Future[Seq[ClinicQueue]] = Future {
+  def getMyPublicQueues(patient: Patient): Future[Seq[(ClinicQueue, Option[Ticket])]] = Future {
     filterPublicMap(
       collection.immutable.Seq(
         RPCQueueMap.values().asScala.toSeq.filter(_.getQueueMapWithClient(patient)): _*
       )
-    ).map(_.clinicQueue)
+    ).map( RpcQueue =>
+      (RpcQueue.clinicQueue, RpcQueue.getCurrentTicket(None))
+    )
   }
 
-  def getCurrentPatient(queueId: Long, doctor: Doctor) = {
-    Option(RPCQueueMap.get(queueId)).map(
+  def close(queueId: Long): Future[Unit] = {
+    val queueToClose = RPCQueueMap.get(queueId)
+    Future(RPCQueueMap.remove(queueId)).map(_ => queueToClose.close())
+  }
+
+  def getCurrentPatient(queueId: Long, doctor: Doctor): Future[Option[Ticket]] = Future{
+    Option(RPCQueueMap.get(queueId)).flatMap(
       queue => queue.getCurrentTicket(Some(doctor))
     )
   }

@@ -15,23 +15,12 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import scala.concurrent.duration.FiniteDuration
 
-/**
- * This controller creates an `Action` to handle HTTP requests to the
- * application's home page.
- */
 
 object HomeController{
 
 }
 @Singleton
 class HomeController @Inject()(cc: ControllerComponents, service: QueueService)(implicit exec: ExecutionContext) extends AbstractController(cc) {
-
-  /**
-   * Create an Action to render an HTML page with a welcome message.
-   * The configuration in the `routes` file means that this method
-   * will be called when the application receives a `GET` request with
-   * a path of `/`.
-   */
 
   def publish(channel: Channel) {
     channel.basicPublish("", "queue_name", null, "Hello world rabbit".getBytes)
@@ -47,10 +36,38 @@ class HomeController @Inject()(cc: ControllerComponents, service: QueueService)(
     )
   }
 
-  def getAllPublicQueues: Future[Seq[(ClinicQueue, Option[Ticket])]] = {
-    service.getAllPublicQueues
+  //option - none = no patient in doctor
+  def getAllPublicQueues: Future[Seq[(ClinicQueue, Option[Ticket], Doctor)]] = {
+    service.getAllPublicQueues.map(_.map(elem => (elem._1, elem._2, new Doctor(elem._1.id, Seq.empty))))
+  } //todo: getDoctorData from base
+
+  //option - none = no patient in doctor
+  def getMyQueues(patient: Patient): Future[Seq[(ClinicQueue, Option[Ticket], Doctor)]] ={
+    service.getMyPublicQueues(patient).map(_.map(elem => (elem._1, elem._2, new Doctor(elem._1.id, Seq.empty))))
+  } //todo: getDoctorData from base
+
+  def getAllPatientsInQueue(queueId: Long): Future[Seq[(Ticket, Patient)]] = {
+    service.getAllPatientsIds(queueId).map(_.map( ticket =>
+      (ticket, new Patient(1L)) //todo: getPatientDataFormDatabase
+    ))
   }
 
+  def getCurrentPatient(queueId: Long, doctor: Doctor):Future[Option[Ticket]] = {
+    service.getCurrentPatient(queueId, doctor)
+  }
+
+  def getNumber(patient: Patient, queueId: Long): Future[Long] = {
+    service.getNumber(patient, queueId)
+  }
+
+  //Option in none - queue empty
+  def getFirstPatientInQueue(doctor: Doctor, queueId: Long): Future[Option[Long]] = {
+    service.nextNumberToDoc(doctor, queueId)
+  }
+
+  def closeChannel(queueId: Long): Future[Unit] = {
+    service.close(queueId)
+  }
 
   def index = Action {
     import com.newmotion.akka.rabbitmq._
@@ -69,11 +86,16 @@ class HomeController @Inject()(cc: ControllerComponents, service: QueueService)(
     val queue2 = createNewPublicQueue(2, d2)
     Future.sequence(Seq(queue1, queue2)).onComplete{
       case Success(num) =>
-        print(service.getNumber(p1, num(0)))
-        print(service.getNumber(p2, num(0)))
-        print(service.nextNumberToDoc(d2, num(1)))
-        print(service.getNumber(p1, num(1)))
-        print(service.nextNumberToDoc(d2, num(1)))
+        Future {
+          print(service.getNumber(p1, num(0)))
+          print(service.getNumber(p2, num(0)))
+          print(service.nextNumberToDoc(d2, num(1)))
+          print(service.getNumber(p1, num(1)))
+          print(service.nextNumberToDoc(d2, num(1)))
+        }.onComplete {
+         case Success(_) => closeChannel(0L)
+         case Failure(_) => ()
+        }
       case Failure(exp) => throw exp
     }
 

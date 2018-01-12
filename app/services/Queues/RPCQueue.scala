@@ -4,22 +4,19 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, Concurren
 
 import scala.collection.JavaConverters._
 import akka.actor.{ActorRef, ActorSystem}
-import akka.stream.actor.ActorPublisherMessage.Request
 import com.newmotion.akka.rabbitmq.{BasicProperties, Channel, ChannelActor, CreateChannel, DefaultConsumer, Envelope}
 import services.Messages.Message
 import services.Messages.Message.Response
 import services.Users.{Client, ClientOwner, Doctor, User}
 import services.{IdStore, MqRabbitEndpoint}
 
-import scala.collection.mutable
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
 case class Ticket(ticketId: Long, clientOwner: ClientOwner)
 
-class RPCQueue(val clinicQueue: ClinicQueue)(implicit system: ActorSystem,
-                 connection: ActorRef,
-                 exchange: String ) extends MqRabbitEndpoint{
+class RPCQueue(val clinicQueue: ClinicQueue)(implicit system: ActorSystem, connection: ActorRef,
+                 exchange: String, executionContext: ExecutionContext ) extends MqRabbitEndpoint {
 
   val id: Long = Await.result( RPCQueue.idStore.getNew, Duration.Inf)
 
@@ -30,6 +27,8 @@ class RPCQueue(val clinicQueue: ClinicQueue)(implicit system: ActorSystem,
   private val currentPatient: ConcurrentMap[Doctor, Ticket] = new ConcurrentHashMap[Doctor, Ticket]()
 
   private val numbersInQueue = new IdStore()
+
+  private var channelMq: Option[Channel] = None
 
   def getQueueMapWithClient(clientOwner: ClientOwner): Boolean =  {
     queueMap.iterator().asScala.exists(_._2 == clientOwner)
@@ -72,12 +71,14 @@ class RPCQueue(val clinicQueue: ClinicQueue)(implicit system: ActorSystem,
               }
             }
         }
+        channelMq = Some(channel)
         channel.basicPublish(exchange, properties.getReplyTo, null, bussinessQueue.toBytes(response))
       }
     }
     channel.basicConsume(queue, true, consumer)
   }
 
+  def close(): Future[Unit] = Future(channelMq.foreach(_.close()))
 
   private def fromLongBytes(x: Array[Byte]) = new String(x, "UTF-8")
 
