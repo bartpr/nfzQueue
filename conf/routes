@@ -15,3 +15,5 @@ GET     /assets/*file               controllers.Assets.versioned(path="/public",
 GET     /signup                     controllers.SignUpController.message
 
 GET     /doctor_home                controllers.DoctorHomeController.count
+
+GET     /login                      controllers.LoginController.message

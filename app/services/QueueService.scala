@@ -1,17 +1,17 @@
 package services
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, TimeUnit}
 import javax.inject._
 
+import scala.collection.JavaConverters._
+
 import akka.actor.{ActorRef, ActorSystem}
+import org.joda.time.DateTime
 import services.Messages.Message.{Request, Response}
-import services.Queues.{ClinicQueue, PublicQueue, RPCQueue}
+import services.Queues.{ClinicQueue, PublicQueue, RPCQueue, Ticket}
 import services.Users._
 
-import scala.collection.mutable
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.{Failure, Success}
-
 
 @Singleton
 class QueueService(){
@@ -19,6 +19,7 @@ class QueueService(){
   implicit val system = ActorSystem()
   val factory = new ConnectionFactory()
   val temp: ActorRef = system.actorOf(ConnectionActor.props(factory), "rabbitmq")
+  val MqRabbitPublicQueueIdStore: IdStore = new IdStore()
 
   implicit val connection: ActorRef = Await.result(
     system.actorSelection(temp.path.toStringWithoutAddress).resolveOne(FiniteDuration.apply(1, TimeUnit.HOURS)),
@@ -28,44 +29,87 @@ class QueueService(){
   implicit val exchange: String = "amq.direct"
   implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
 
-  var RPCQueueMap: mutable.Seq[RPCQueue] = mutable.Seq.empty[RPCQueue]
+  val RPCQueueMap:  ConcurrentHashMap[Long, RPCQueue] = new ConcurrentHashMap[Long, RPCQueue]()
 
   def getNumber(from: Patient, queueId: Long): Future[Long] = {
-    val queueOpt = RPCQueueMap.find(_.id == queueId)
+    val queueOpt = Option(RPCQueueMap.get(queueId))
     queueOpt.map(getNumber(from, _)) match {
-      case None => throw new IllegalStateException("No queue with these number present")
+      case None => throw new IllegalStateException(s"No queue with this number($queueId) present")
       case Some(value) => value
     }
   }
 
   def nextNumberToDoc(from: Doctor, queueId: Long): Future[Option[Long]] = {
-    val queueOpt = RPCQueueMap.find(_.id == queueId)
+    val queueOpt = Option(RPCQueueMap.get(queueId))
     queueOpt.map(nextNumberToDoc(from, _)) match {
-      case None => throw new IllegalStateException("No queue with these number present")
+      case None => throw new IllegalStateException(s"No queue with this number($queueId) present")
       case Some(value) => value
     }
   }
 
   def getNumber(patient: Patient, queue: RPCQueue): Future[Long] = {
     val client = new Client(patient)
-    getResponse(Messages.Message.GetNumberMsg(patient), client, queue).map {
+    getResponse(Messages.Message.GetNumberMsg(patient), client, queue).collect {
       case msg: Messages.Message.YourNumberIs =>
         msg.number
     }
   }
 
+  def getAllPatientsIds(queueId: Long): Future[Seq[Ticket]] = Future {
+    Option(RPCQueueMap.get(queueId))
+      .map(_.getAllTickets.collect {
+        case ticket: Ticket => if(ticket.clientOwner.isInstanceOf[Patient]) Some(ticket) else None
+      }.flatten
+      ).getOrElse(Seq.empty)
+  }
+
   def nextNumberToDoc(from: Doctor, queue: RPCQueue): Future[Option[Long]] = {
     val client = new Client(from)
-    getResponse(Messages.Message.NextPlease(from), client, queue).map {
+    getResponse(Messages.Message.NextPlease(from), client, queue).collect {
         case msg: Messages.Message.NextPatientIs =>
           msg.patientId
       }
   }
 
-
   private def getResponse(req: Request, cli: Client, queue: RPCQueue): Future[Response] = {
     cli.createChannel().flatMap( _ =>
       cli.responseWaiter(req, queue.name)
+    )
+  }
+
+  private def filterPublicMap(allQueueSeq: Seq[RPCQueue]): Seq[RPCQueue] = {
+    allQueueSeq.filter(_.clinicQueue match {
+      case _: PublicQueue => true
+      case _ => false
+    })
+  }
+
+  def getAllPublicQueues: Future[Seq[(ClinicQueue, Option[Ticket])]] = Future {
+    filterPublicMap(
+      collection.immutable.Seq(RPCQueueMap.values().asScala.toSeq: _*)
+    ).map( RpcQueue =>
+      (RpcQueue.clinicQueue, RpcQueue.getCurrentTicket(None))
+    )
+  }
+
+  def getMyPublicQueues(patient: Patient): Future[Seq[(ClinicQueue, Option[Ticket])]] = Future {
+    filterPublicMap(
+      collection.immutable.Seq(
+        RPCQueueMap.values().asScala.toSeq.filter(_.getQueueMapWithClient(patient)): _*
+      )
+    ).map( RpcQueue =>
+      (RpcQueue.clinicQueue, RpcQueue.getCurrentTicket(None))
+    )
+  }
+
+  def close(queueId: Long): Future[Unit] = {
+    val queueToClose = RPCQueueMap.get(queueId)
+    Future(RPCQueueMap.remove(queueId)).map(_ => queueToClose.close())
+  }
+
+  def getCurrentPatient(queueId: Long, doctor: Doctor): Future[Option[Ticket]] = Future{
+    Option(RPCQueueMap.get(queueId)).flatMap(
+      queue => queue.getCurrentTicket(Some(doctor))
     )
   }
 
@@ -74,10 +118,32 @@ class QueueService(){
   def producePatiencesFromDB() = ???
   def savePatiencesToDB() = ???
 
+  /* method only because of all queue's lifecycle is in MQRabbit
+  todo: creating new entity for planned queue
+  */
+  def getNewQueue(durationInHours: Int, doctors: Seq[Long], specializationId: Option[Long] = None): Future[PublicQueue] = {
+    if(specializationId.isDefined)
+      ??? //If specialization ID then private queue
+    else {
+      val now = new DateTime()
+      MqRabbitPublicQueueIdStore.getNew.map(
+        PublicQueue(
+          _,
+          now,
+          now.plusHours(durationInHours),
+          doctors
+        )
+      )
+    }
+  }
+
+
   def createNewQueue(clinicQueue: ClinicQueue): Future[RPCQueue] = {
-    val pq = new RPCQueue(clinicQueue)
-    RPCQueueMap = RPCQueueMap :+ pq
-    pq.createChannel.map(_ => pq)
+    Future(new RPCQueue(clinicQueue)).flatMap(
+      rpc => Future(RPCQueueMap.put(rpc.id, rpc)).flatMap(_ => Future(rpc)
+    ).flatMap { rPCQueue =>
+      rPCQueue.createChannel.map(_ => rPCQueue)
+    })
   }
 
   def deleteQueue = ???
@@ -85,7 +151,7 @@ class QueueService(){
   private def consumePatient() = ???
 }
 
-object QueueService{
+/* object QueueService{
   implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
   def main(args: Array[String]): Unit = {
     def print(future: Future[Any]): Unit ={
@@ -110,4 +176,4 @@ object QueueService{
     }
   }
 
-}
+}*/

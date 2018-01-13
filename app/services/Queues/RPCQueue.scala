@@ -1,27 +1,46 @@
 package services.Queues
 
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, ConcurrentMap}
 
+import scala.collection.JavaConverters._
 import akka.actor.{ActorRef, ActorSystem}
-import akka.stream.actor.ActorPublisherMessage.Request
 import com.newmotion.akka.rabbitmq.{BasicProperties, Channel, ChannelActor, CreateChannel, DefaultConsumer, Envelope}
 import services.Messages.Message
 import services.Messages.Message.Response
-import services.Users.{ClientOwner, User}
+import services.Users.{Client, ClientOwner, Doctor, User}
 import services.{IdStore, MqRabbitEndpoint}
 
-import scala.concurrent.Await
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-class RPCQueue(clinicQueue: ClinicQueue)(implicit system: ActorSystem,
-                 connection: ActorRef,
-                 exchange: String ) extends MqRabbitEndpoint{
+case class Ticket(ticketId: Long, clientOwner: ClientOwner)
+
+class RPCQueue(val clinicQueue: ClinicQueue)(implicit system: ActorSystem, connection: ActorRef,
+                 exchange: String, executionContext: ExecutionContext ) extends MqRabbitEndpoint {
+
   val id: Long = Await.result( RPCQueue.idStore.getNew, Duration.Inf)
 
   override val name: String = s"queue-$id"
 
-  private var queueMap: ConcurrentLinkedQueue[(Long, ClientOwner)] = new ConcurrentLinkedQueue[(Long, ClientOwner)]()
+  private val queueMap: ConcurrentLinkedQueue[(Long, ClientOwner)] = new ConcurrentLinkedQueue[(Long, ClientOwner)]()
+
+  private val currentPatient: ConcurrentMap[Doctor, Ticket] = new ConcurrentHashMap[Doctor, Ticket]()
+
   private val numbersInQueue = new IdStore()
+
+  private var channelMq: Option[Channel] = None
+
+  def getQueueMapWithClient(clientOwner: ClientOwner): Boolean =  {
+    queueMap.iterator().asScala.exists(_._2 == clientOwner)
+  }
+
+  def getCurrentTicket(doctorOpt: Option[Doctor]): Option[Ticket] = {
+    doctorOpt.map(doctor => Option(currentPatient.get(doctor)))
+      .getOrElse(currentPatient.values().asScala.headOption)
+    //todo: when more doctors -> Option to Seq
+  }
+
+  def getAllTickets: Seq[Ticket] = queueMap.iterator.asScala.toSeq.map(ticket => Ticket(ticket._1, ticket._2))
 
   override def setupChannel(channel: Channel, self: ActorRef) {
     //channel.exchangeDeclare(exchange, "direct")
@@ -44,19 +63,22 @@ class RPCQueue(clinicQueue: ClinicQueue)(implicit system: ActorSystem,
             } else {
               val currElem = queueMap.poll()
               currElem match {
-                case (_, user: User) =>
+                case (ticket, user: User) =>
+                  currentPatient.replace(doctor.asInstanceOf[Doctor], Ticket(ticket, user))
                   System.out.println(s"[$name] Doctor get a patient" + user.userId)
                   Message.NextPatientIs(clinicQueue, Some(user.userId))
                 case _ => throw new IllegalStateException("only user can go to clinic")
               }
             }
         }
+        channelMq = Some(channel)
         channel.basicPublish(exchange, properties.getReplyTo, null, bussinessQueue.toBytes(response))
       }
     }
     channel.basicConsume(queue, true, consumer)
   }
 
+  def close(): Future[Unit] = Future(channelMq.foreach(_.close()))
 
   private def fromLongBytes(x: Array[Byte]) = new String(x, "UTF-8")
 
