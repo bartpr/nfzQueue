@@ -110,7 +110,7 @@ class HomeController @Inject()(cc: ControllerComponents, service: QueueService) 
 
 
     System.out.println("Hello world")
-    Ok(views.html.index("Your new application is ready."))
+    Ok(views.html.index("login"))
   }
 
 }

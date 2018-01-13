@@ -1,0 +1,27 @@
+@(message: String, style: String = "scala")
+@import helper._
+
+@defining(play.core.PlayVersion.current) { version =>
+
+    @*<section id="top">*@
+    @*<div class="wrapper">*@
+    @*<h1><a href="https://playframework.com/documentation/@version/Home">@message</a></h1>*@
+    @*</div>*@
+    @*</section>*@
+    <script src="@routes.Assets.versioned("javascripts/doctor_home.js")" type="text/javascript"></script>
+
+    <div id="content" class="wrapper doc">
+        <article>
+            <h1>Jan Kowalski</h1>
+            <a id="createQueue" href="#">+ stwórz kolejkę</a>
+        </article>
+    </div>
+        <div id="test">nananan</div>
+
+@*<script type="text/javascript" charset="utf-8">*@
+    @*$('#createQueue').click(function () {*@
+        @*$('#test').hide();*@
+    @*})*@
+@*</script>*@
+
+}

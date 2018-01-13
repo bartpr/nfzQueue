@@ -9,12 +9,20 @@
  * argument is a `String` with the title of the page, the second
  * argument is an `Html` object containing the body of the page.
  *@
-@main("Welcome to Play") {
+@if(message == "login"){
+@main("Kolejka NFZ") {
 
     @*
      * Get an `Html` object by calling the built-in Play welcome
      * template and passing a `String` message.
      *@
+
     @welcome(message, style = "scala")
 
-}
+
+
+}}
+    @if(message == "doctor_home"){
+@main("Kolejka NFZ") {
+@doctor_home(message, style = "scala")
+    }}
