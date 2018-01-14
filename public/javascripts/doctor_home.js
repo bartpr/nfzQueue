@@ -1,1 +1,4 @@
-console.log('asdfasdweqwerqwerqweqewr');
+
+function createQueue() {
+    console.log('nananana xd');
+}
