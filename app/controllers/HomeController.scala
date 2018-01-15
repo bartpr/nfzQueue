@@ -5,11 +5,11 @@ import javax.inject._
 
 import akka.actor._
 import com.rabbitmq.client.Channel
-import org.joda.time.DateTime
+import play.api.db.Database
 import play.api.mvc._
-import services.QueueService
+import services.{QueueService, UserService}
 import services.Queues.{ClinicQueue, PublicQueue, Ticket}
-import services.Users.{Doctor, Patient}
+import services.Users.{Doctor, Patient, User}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -20,7 +20,8 @@ object HomeController{
 
 }
 @Singleton
-class HomeController @Inject()(cc: ControllerComponents, service: QueueService)(implicit exec: ExecutionContext) extends AbstractController(cc) {
+class HomeController @Inject()(db: Database, cc: ControllerComponents, service: QueueService, userService: UserService)
+                              (implicit exec: ExecutionContext) extends AbstractController(cc) {
 
   def publish(channel: Channel) {
     channel.basicPublish("", "queue_name", null, "Hello world rabbit".getBytes)
@@ -38,22 +39,36 @@ class HomeController @Inject()(cc: ControllerComponents, service: QueueService)(
 
   //option - none = no patient in doctor
   def getAllPublicQueues: Future[Seq[(ClinicQueue, Option[Ticket], Doctor)]] = {
-    service.getAllPublicQueues.map(_.map(elem => (elem._1, elem._2, new Doctor(elem._1.id, Seq.empty))))
-  } //todo: getDoctorData from base
+    for{
+      queues <- service.getAllPublicQueues
+      user <- Future.sequence(queues.map(elem => userService.getUser(elem._1.doctorsIds.head).map(_.asInstanceOf[Doctor])))
+    } yield {
+      (queues zip user).map( zipped =>
+        (zipped._1._1, zipped._1._2, zipped._2)
+      )
+    }
+  }
 
   //option - none = no patient in doctor
-  def getMyQueues(patient: Patient): Future[Seq[(ClinicQueue, Option[Ticket], Doctor)]] ={
-    service.getMyPublicQueues(patient).map(_.map(elem => (elem._1, elem._2, new Doctor(elem._1.id, Seq.empty))))
-  } //todo: getDoctorData from base
+  def getMyQueues(patient: Patient): Future[Seq[(ClinicQueue, Option[Ticket], Doctor)]] = {
+    for {
+    queues <- service.getMyPublicQueues(patient)
+    user <- Future.sequence(queues.map(elem => userService.getUser(elem._1.doctorsIds.head).map(_.asInstanceOf[Doctor])))
+    } yield {
+      (queues zip user).map( zipped =>
+        (zipped._1._1, zipped._1._2, zipped._2)
+      )
+    }
+  }
 
-  def getAllPatientsInQueue(queueId: Long): Future[Seq[(Ticket, Patient)]] = {
-    service.getAllPatientsIds(queueId).map(_.map( ticket =>
-      (ticket, new Patient(1L)) //todo: getPatientDataFormDatabase
-    ))
+  def getAllPatientsInQueue(queueId: Long): Future[Seq[Ticket]] = {
+    for {
+      queues <- service.getAllPatientsIds(queueId)
+    } yield queues
   }
 
   def getCurrentPatient(queueId: Long, doctor: Doctor):Future[Option[Ticket]] = {
-    service.getCurrentPatient(queueId, doctor)
+    service.getCurrentPatient(queueId, doctor) //todo: getPatientDataFormDatabase
   }
 
   def getNumber(patient: Patient, queueId: Long): Future[Long] = {
@@ -70,7 +85,6 @@ class HomeController @Inject()(cc: ControllerComponents, service: QueueService)(
   }
 
   def index = Action {
-    import com.newmotion.akka.rabbitmq._
     implicit val system = ActorSystem()
 
     def print(future: Future[Any]): Unit ={
@@ -78,10 +92,10 @@ class HomeController @Inject()(cc: ControllerComponents, service: QueueService)(
     }
 
     System.out.println("Hello")
-    val p1 = new Patient(1L)
-    val p2 = new Patient(2L)
-    val d1 = new Doctor(1L, Seq.empty)
-    val d2 = new Doctor(2L, Seq.empty)
+    val p1 = new Patient(1L, "imie", "nazwisko")
+    val p2 = new Patient(2L, "imie", "nazwisko")
+    val d1 = new Doctor(1L, "imie", "nazwisko")
+    val d2 = new Doctor(2L, "imie", "nazwisko")
     val queue1 = createNewPublicQueue(2, d1)
     val queue2 = createNewPublicQueue(2, d2)
     Future.sequence(Seq(queue1, queue2)).onComplete{
@@ -92,6 +106,7 @@ class HomeController @Inject()(cc: ControllerComponents, service: QueueService)(
           print(service.nextNumberToDoc(d2, num(1)))
           print(service.getNumber(p1, num(1)))
           print(service.nextNumberToDoc(d2, num(1)))
+          print(service.getAllPublicQueues)
         }.onComplete {
          case Success(_) => closeChannel(0L)
          case Failure(_) => ()

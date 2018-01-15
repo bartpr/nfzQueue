@@ -2,7 +2,7 @@ package services.Users
 
 import akka.actor.{ActorRef, ActorSystem}
 
-class Doctor(val userId: Long, specializationIdSeq: Seq[String])
+class Doctor(val userId: Long, val name: String, val surname: String, specializationIdSeq: Seq[String] = Seq.empty)
   extends User {
 
   import services.Users.Perm._
