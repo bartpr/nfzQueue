@@ -1,0 +1,12 @@
+@import services.Queues.{ClinicQueue, Ticket}
+@import services.Users.Doctor
+
+@(queues: Seq[(ClinicQueue, Option[Ticket], Doctor)])
+
+<h1>Queues</h1>
+
+<ul>
+    @queues.map { queue =>
+        <li>@queue</li>
+    }
+</ul>
