@@ -15,7 +15,6 @@ import services.Users.{Doctor, Patient, User}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import scala.concurrent.duration.FiniteDuration
-import scala.util.control.NonFatal
 
 
 object HomeController{
@@ -67,9 +66,7 @@ class HomeController @Inject()(db: Database, cc: ControllerComponents, service: 
     val queue = PublicQueue(1, DateTime.now().minusHours(1), DateTime.now(), Seq(1, 2, 3))
     val ticket = Some(Ticket(1, new Patient(7, "John", "Doe")))
     val doctor = new Doctor(6, "Doctor", "House")
-    Future {
-      Seq((queue, ticket, doctor))
-    }
+    Future(Seq((queue, ticket, doctor)))
   }
 
   def getAllPatientsInQueue(queueId: Long): Future[Seq[Ticket]] = {
@@ -97,16 +94,8 @@ class HomeController @Inject()(db: Database, cc: ControllerComponents, service: 
 
   def queues = Action.async {
     val patient = new Patient(2, "Foo", "Bar")
-    val result = for {
-      queues <- getMockQueue(patient)
-    } yield {
-      Ok(views.html.queues(queues))
-    }
-
-    result.recover {
-      case NonFatal(e) =>
-        Ok(views.html.index("Error"))
-    }
+    val queues = getMockQueue(patient)
+    queues.map(q => Ok(views.html.queues(q)))
   }
 
   def index = Action {

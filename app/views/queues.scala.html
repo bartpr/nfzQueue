@@ -3,10 +3,30 @@
 
 @(queues: Seq[(ClinicQueue, Option[Ticket], Doctor)])
 
-<h1>Queues</h1>
 
-<ul>
-    @queues.map { queue =>
-        <li>@queue</li>
-    }
-</ul>
+@main("Queues") {
+
+    <h1>Queues</h1>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th scope="col">Queue</th>
+                <th scope="col">Ticket</th>
+                <th scope="col">Doctor</th>
+            </tr>
+        </thead>
+        <tbody>
+
+            @queues.map { queue =>
+                <tr>
+                    <td>@queue._1</td>
+                    <td>@queue._2</td>
+                    <td>@queue._3</td>
+                </tr>
+            }
+
+        </tbody>
+    </table>
+
+}
