@@ -1,0 +1,7 @@
+@import services.Queues.{ClinicQueue, Ticket}
+@import services.Users.Doctor
+
+@(queues: Seq[(ClinicQueue, Option[Ticket], Doctor)])
+
+@queues
+

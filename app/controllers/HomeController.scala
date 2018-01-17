@@ -5,6 +5,7 @@ import javax.inject._
 
 import akka.actor._
 import com.rabbitmq.client.Channel
+import org.joda.time.DateTime
 import play.api.db.Database
 import play.api.mvc._
 import services.{QueueService, UserService}
@@ -14,6 +15,7 @@ import services.Users.{Doctor, Patient, User}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import scala.concurrent.duration.FiniteDuration
+import scala.util.control.NonFatal
 
 
 object HomeController{
@@ -61,6 +63,15 @@ class HomeController @Inject()(db: Database, cc: ControllerComponents, service: 
     }
   }
 
+  def getMockQueue(patient: Patient): Future[Seq[(ClinicQueue, Option[Ticket], Doctor)]] = {
+    val queue = PublicQueue(1, DateTime.now().minusHours(1), DateTime.now(), Seq(1, 2, 3))
+    val ticket = Some(Ticket(1, new Patient(7, "John", "Doe")))
+    val doctor = new Doctor(6, "Doctor", "House")
+    Future {
+      Seq((queue, ticket, doctor))
+    }
+  }
+
   def getAllPatientsInQueue(queueId: Long): Future[Seq[Ticket]] = {
     for {
       queues <- service.getAllPatientsIds(queueId)
@@ -82,6 +93,20 @@ class HomeController @Inject()(db: Database, cc: ControllerComponents, service: 
 
   def closeChannel(queueId: Long): Future[Unit] = {
     service.close(queueId)
+  }
+
+  def queues = Action {
+    val patient = new Patient(2, "Foo", "Bar")
+    val result = for {
+      queues <- getMockQueue(patient)
+    } yield {
+      Ok(views.html.queues(queues))
+    }
+
+    result.recover {
+      case NonFatal(e) =>
+        Ok(views.html.index)
+    }
   }
 
   def index = Action {
