@@ -17,3 +17,5 @@ GET     /signup                     controllers.SignUpController.message
 GET     /doctor_home                controllers.DoctorHomeController.count
 
 GET     /login                      controllers.LoginController.message
+
+GET     /queues                     controllers.HomeController.queues
