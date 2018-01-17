@@ -12,8 +12,12 @@ import scala.concurrent.{ExecutionContext, Future, Promise}
 @Singleton
 class SignUpController @Inject()(db: Database, cc: ControllerComponents, actorSystem: ActorSystem)(implicit exec: ExecutionContext) extends AbstractController(cc) {
 
-  def message = Action.async {
-    getFutureMessage(1.second).map { msg => Ok(msg) }
+  def message = Action { request =>
+    request.session.get("connected").map { user =>
+      Ok("Hello " + user)
+    }.getOrElse {
+      Unauthorized("Oops, you are not connected")
+    }
   }
 
   private def createPatientQuery(username: String,  password: String, name: String, lastname: String): String = {
@@ -41,7 +45,8 @@ class SignUpController @Inject()(db: Database, cc: ControllerComponents, actorSy
     val promise: Promise[String] = Promise[String]()
     actorSystem.scheduler.scheduleOnce(delayTime) {
       promise.success("Hijajaja!")
-    }(actorSystem.dispatcher) // run scheduled tasks using the actor system's dispatcher
+    }(actorSystem.dispatcher)
+    // run scheduled tasks using the actor system's dispatcher
     promise.future
   }
 

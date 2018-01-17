@@ -15,3 +15,7 @@ GET     /assets/*file               controllers.Assets.versioned(path="/public",
 GET     /signup                     controllers.SignUpController.message
 
 GET     /login                      controllers.LoginController.message
+
+GET     /patient-view               controllers.LoginController.keke(j, k)
+
+POST    /resolve-login              controllers.LoginController.userPost
