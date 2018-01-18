@@ -42,6 +42,7 @@ class SignUpController @Inject()(db: Database, cc: ControllerComponents, actorSy
 
 
   private def getFutureMessage(delayTime: FiniteDuration): Future[String] = {
+    createPatient("anna", "mikolaj", "Anna", "Bytnar", patient = true)
     val promise: Promise[String] = Promise[String]()
     actorSystem.scheduler.scheduleOnce(delayTime) {
       promise.success("Hijajaja!")
