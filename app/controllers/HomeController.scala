@@ -5,6 +5,7 @@ import javax.inject._
 
 import akka.actor._
 import com.rabbitmq.client.Channel
+import org.joda.time.DateTime
 import play.api.db.Database
 import play.api.mvc._
 import services.{QueueService, UserService}
@@ -61,6 +62,13 @@ class HomeController @Inject()(db: Database, cc: ControllerComponents, service: 
     }
   }
 
+  def getMockQueue(patient: Patient): Future[Seq[(ClinicQueue, Option[Ticket], Doctor)]] = {
+    val queue = PublicQueue(1, DateTime.now().minusHours(1), DateTime.now(), Seq(1, 2, 3))
+    val ticket = Some(Ticket(1, new Patient(7, "John", "Doe")))
+    val doctor = new Doctor(6, "Doctor", "House")
+    Future(Seq((queue, ticket, doctor)))
+  }
+
   def getAllPatientsInQueue(queueId: Long): Future[Seq[Ticket]] = {
     for {
       queues <- service.getAllPatientsIds(queueId)
@@ -82,6 +90,12 @@ class HomeController @Inject()(db: Database, cc: ControllerComponents, service: 
 
   def closeChannel(queueId: Long): Future[Unit] = {
     service.close(queueId)
+  }
+
+  def queues = Action.async {
+    val patient = new Patient(2, "Foo", "Bar")
+    val queues = getMockQueue(patient)
+    queues.map(q => Ok(views.html.queues(q)))
   }
 
   def index = Action {

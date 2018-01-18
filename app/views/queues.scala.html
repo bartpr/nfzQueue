@@ -1,0 +1,32 @@
+@import services.Queues.{ClinicQueue, Ticket}
+@import services.Users.Doctor
+
+@(queues: Seq[(ClinicQueue, Option[Ticket], Doctor)])
+
+
+@main("Queues") {
+
+    <h1>Queues</h1>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th scope="col">Queue</th>
+                <th scope="col">Ticket</th>
+                <th scope="col">Doctor</th>
+            </tr>
+        </thead>
+        <tbody>
+
+            @queues.map { queue =>
+                <tr>
+                    <td>@queue._1</td>
+                    <td>@queue._2</td>
+                    <td>@queue._3</td>
+                </tr>
+            }
+
+        </tbody>
+    </table>
+
+}

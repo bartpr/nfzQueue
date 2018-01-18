@@ -18,6 +18,8 @@ GET     /doctor_home                controllers.DoctorHomeController.count
 
 GET     /login                      controllers.LoginController.message
 
+GET     /queues                      controllers.HomeController.queues
+
 GET     /patient-view               controllers.LoginController.keke(j, k)
 
 POST    /resolve-login              controllers.LoginController.userPost
