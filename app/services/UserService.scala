@@ -1,8 +1,11 @@
 package services
 
 import javax.inject.{Inject, Singleton}
+
+import akka.http.scaladsl.model.HttpHeader.ParsingResult.Ok
 import play.api.db.Database
 import services.Users.{Doctor, Patient, User}
+
 import scala.concurrent.{ExecutionContext, Future}
 
 
@@ -13,7 +16,7 @@ class UserService@Inject()(db: Database)(implicit val ec: ExecutionContext){
     try {
       val stmt = conn.createStatement
       val rs = stmt.executeQuery(
-        "SELECT \"UserName\", \"Type\", \"Name\", \"Lastname\" FROM public.\"User\" WHERE \"userId\" = '" + userId + "' ;"
+        "SELECT \"userId\", \"Type\", \"Name\", \"Lastname\" FROM public.\"User\" WHERE \"userId\" = '" + userId + "' ;"
       )
       if(rs.next())
         rs.getInt(2) match {

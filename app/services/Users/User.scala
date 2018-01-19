@@ -5,6 +5,8 @@ trait User extends ClientOwner{
   def permSeq: Seq[Perm]
   def name: String
   def surname: String
+
+  override def id: Long = userId
   def hasPerm(perm: Perm): Boolean = {
     permSeq.contains(perm)
   }

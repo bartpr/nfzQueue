@@ -38,49 +38,30 @@ class HomeController @Inject()(db: Database, cc: ControllerComponents, service: 
     )
   }
 
-  //option - none = no patient in doctor
-  def getAllPublicQueues: Future[Seq[(ClinicQueue, Option[Ticket], Doctor)]] = {
-    for{
-      queues <- service.getAllPublicQueues
-      user <- Future.sequence(queues.map(elem => userService.getUser(elem._1.doctorsIds.head).map(_.asInstanceOf[Doctor])))
-    } yield {
-      (queues zip user).map( zipped =>
-        (zipped._1._1, zipped._1._2, zipped._2)
-      )
-    }
-  }
-
-  //option - none = no patient in doctor
-  def getMyQueues(patient: Patient): Future[Seq[(ClinicQueue, Option[Ticket], Doctor)]] = {
-    for {
-    queues <- service.getMyPublicQueues(patient)
-    user <- Future.sequence(queues.map(elem => userService.getUser(elem._1.doctorsIds.head).map(_.asInstanceOf[Doctor])))
-    } yield {
-      (queues zip user).map( zipped =>
-        (zipped._1._1, zipped._1._2, zipped._2)
-      )
-    }
-  }
-
   def getMockQueue(patient: Patient): Future[Seq[(ClinicQueue, Option[Ticket], Doctor)]] = {
-    val queue = PublicQueue(1, DateTime.now().minusHours(1), DateTime.now(), Seq(1, 2, 3))
+    val queue = PublicQueue(1, DateTime.now().minusHours(1), DateTime.now(), Seq(1))
     val ticket = Some(Ticket(1, new Patient(7, "John", "Doe")))
     val doctor = new Doctor(6, "Doctor", "House")
     Future(Seq((queue, ticket, doctor)))
   }
 
-  def getAllPatientsInQueue(queueId: Long): Future[Seq[Ticket]] = {
-    for {
-      queues <- service.getAllPatientsIds(queueId)
-    } yield queues
-  }
+  def getNumber(queueId: String) =
+    Action.async { request =>
+    request.session.get("userId").map { user =>
+      for{
+        client <- userService.getUser(user.toLong)
+      } yield {
+        client match {
+          case Some(patient: Patient) =>
+            service.getNumber(patient, queueId.toLong).map( _ =>
+              Redirect(routes.LoginController.passwordChecker)
+            )
+          case Some(doctor: Doctor) => Future(Ok("Po co doctorowi numerek?"))
+          case _ => Future(Ok("Nie jesteś zalogowany"))
+        }
+      }
+    }.getOrElse(Future(Future(Ok("Nie jesteś zalogowany")))).flatten
 
-  def getCurrentPatient(queueId: Long, doctor: Doctor):Future[Option[Ticket]] = {
-    service.getCurrentPatient(queueId, doctor) //todo: getPatientDataFormDatabase
-  }
-
-  def getNumber(patient: Patient, queueId: Long): Future[Long] = {
-    service.getNumber(patient, queueId)
   }
 
   //Option in none - queue empty
@@ -92,11 +73,13 @@ class HomeController @Inject()(db: Database, cc: ControllerComponents, service: 
     service.close(queueId)
   }
 
-  def queues = Action.async {
-    val patient = new Patient(2, "Foo", "Bar")
-    val queues = getMockQueue(patient)
-    queues.map(q => Ok(views.html.queues(q)))
-  }
+//  def queues = Action.async {
+////    userService.getUser()
+//    val patient = new Patient(2, "Foo", "Bar")
+//    val queues = getMockQueue(patient)
+//    queues.map(q =>
+//      Ok(views.html.queues(q)))
+//  }
 
   def index = Action {
     implicit val system = ActorSystem()
@@ -117,13 +100,10 @@ class HomeController @Inject()(db: Database, cc: ControllerComponents, service: 
         Future {
           print(service.getNumber(p1, num(0)))
           print(service.getNumber(p2, num(0)))
-          print(service.nextNumberToDoc(d2, num(1)))
+          print(service.nextNumberToDoc(d2, num(0)))
           print(service.getNumber(p1, num(1)))
           print(service.nextNumberToDoc(d2, num(1)))
           print(service.getAllPublicQueues)
-        }.onComplete {
-         case Success(_) => closeChannel(0L)
-         case Failure(_) => ()
         }
       case Failure(exp) => throw exp
     }

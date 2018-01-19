@@ -15,8 +15,8 @@
         @form(action = routes.LoginController.userPost) {
             @CSRF.formField
             @inputText(userForm("login"))
-            @inputText(userForm("pass"))
-            <input type="submit" class="btn" value="Submit :)">
+            @inputPassword(userForm("pass"))
+            <input type="submit" class="btn" value="zaloguj">
         }
     </body>
 </html>

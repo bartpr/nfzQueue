@@ -1,28 +1,64 @@
 @import services.Queues.{ClinicQueue, Ticket}
 @import services.Users.Doctor
 
-@(queues: Seq[(ClinicQueue, Option[Ticket], Doctor)])
+@(myQueues: Seq[(ClinicQueue, Option[Ticket], Doctor)])(queues: Seq[(ClinicQueue, Option[Ticket], Doctor)])
 
 
 @main("Queues") {
 
-    <h1>Queues</h1>
+<h1>My Queues</h1>
+
+    <table class="table">
+        <thead>
+        <tr>
+            <th scope="col">Kolejka zaćzeła się</th>
+            <th scope="col">Planowane zakończenie</th>
+            <th scope="col">Imie doktora</th>
+            <th scope="col">Nazwisko doktora</th>
+            <th scope="col">Aktualnie obsługiwany numer</th>
+            <th scope="col">Twój numerek</th>
+        </tr>
+        </thead>
+        <tbody>
+
+        @myQueues.map { queue =>
+        <tr>
+            <td>@queue._1.start</td>
+            <td>@queue._1.end</td>
+            <td>@queue._3.name</td>
+            <td>@queue._3.surname</td>
+            <td>@queue._2.map(_.ticketId.toString).getOrElse("pusta")</td>
+            <td><a href="getTicket/@queue._1.id">Weź numerek</a></td>
+        </tr>
+        }
+
+        </tbody>
+    </table>
+
+
+    <h1>All Queues</h1>
 
     <table class="table">
         <thead>
             <tr>
-                <th scope="col">Queue</th>
-                <th scope="col">Ticket</th>
-                <th scope="col">Doctor</th>
+                <th scope="col">Kolejka zaczęła się</th>
+                <th scope="col">Planowane zakończenie</th>
+                <th scope="col">Imie doktora</th>
+                <th scope="col">Nazwisko doktora</th>
+                <th scope="col">Aktualnie obsługiwany numer</th>
+                <th scope="col">Akcja</th>
             </tr>
         </thead>
         <tbody>
 
             @queues.map { queue =>
                 <tr>
-                    <td>@queue._1</td>
-                    <td>@queue._2</td>
-                    <td>@queue._3</td>
+                    <td>@queue._1.start</td>
+                    <td>@queue._1.end</td>
+                    <td>@queue._3.name</td>
+                    <td>@queue._3.surname</td>
+                    <td>@queue._2.map(_.ticketId.toString).getOrElse("pusta")</td>
+                    <td><a href="getTicket/@queue._1.id">Weź numerek</a></td>
                 </tr>
             }
 

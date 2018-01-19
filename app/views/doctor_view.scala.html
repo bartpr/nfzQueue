@@ -1,0 +1,39 @@
+@import services.Queues.{ClinicQueue, Ticket}
+@import services.Users.User
+
+@(qId: Long)(currentPatientData: Option[User])(allPatients: Seq[(Long, User)])
+
+
+@main("Doctor Panel") {
+<p>Kolejka nr @qId</p>
+
+<p><a href="endQueue/@qId">Zakończ kolejkę</a></p>
+
+<p>Aktualnie obsługiwany pacjent: @currentPatientData.map(pat => pat.name + " " + pat.surname).getOrElse("Wolny lekarz")</p>
+
+<p><a href="getPatient/@qId">Weź następnego pacjenta</a></p>
+
+<h1>Kolejka</h1>
+
+<table class="table">
+    <thead>
+    <tr>
+        <th scope="col">Numerek</th>
+        <th scope="col">Imie Pacjenta</th>
+        <th scope="col">Nazwisko Pacjenta</th>
+    </tr>
+    </thead>
+    <tbody>
+
+    @allPatients.map { flatenDataPair =>
+    <tr>
+        <td>@flatenDataPair._1<td>
+        <td>@flatenDataPair._2.name</td>
+        <td>@flatenDataPair._2.surname</td>
+    </tr>
+    }
+
+    </tbody>
+</table>
+
+}

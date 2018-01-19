@@ -94,9 +94,11 @@ class QueueService(){
 
   def getMyPublicQueues(patient: Patient): Future[Seq[(ClinicQueue, Option[Ticket])]] = Future {
     filterPublicMap(
-      collection.immutable.Seq(
-        RPCQueueMap.values().asScala.toSeq.filter(_.getQueueMapWithClient(patient)): _*
-      )
+      collection.immutable.Seq({
+        val a = RPCQueueMap.values().asScala.toSeq
+        val b = a.filter(_.getQueueMapWithClient(patient))
+        b
+      }: _*)
     ).map( RpcQueue =>
       (RpcQueue.clinicQueue, RpcQueue.getCurrentTicket(None))
     )
@@ -111,6 +113,10 @@ class QueueService(){
     Option(RPCQueueMap.get(queueId)).flatMap(
       queue => queue.getCurrentTicket(Some(doctor))
     )
+  }
+
+  def getMyQueue(doctor: Doctor): Future[Option[Long]] = Future {
+    RPCQueueMap.values.asScala.find(_.clinicQueue.doctorsIds.head == doctor.userId).map(_.clinicQueue.id)
   }
 
   def estimateVisitTime() = ???

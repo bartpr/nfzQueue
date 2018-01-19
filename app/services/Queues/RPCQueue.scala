@@ -31,7 +31,7 @@ class RPCQueue(val clinicQueue: ClinicQueue)(implicit system: ActorSystem, conne
   private var channelMq: Option[Channel] = None
 
   def getQueueMapWithClient(clientOwner: ClientOwner): Boolean =  {
-    queueMap.iterator().asScala.exists(_._2 == clientOwner)
+    queueMap.iterator().asScala.exists(_._2.id == clientOwner.id)
   }
 
   def getCurrentTicket(doctorOpt: Option[Doctor]): Option[Ticket] = {
