@@ -23,3 +23,9 @@ GET     /patient-view               controllers.LoginController.passwordChecker
 POST    /resolve-login              controllers.LoginController.userPost
 
 GET     /getTicket/:queueId         controllers.HomeController.getNumber(queueId)
+
+POST    /createQueue                controllers.LoginController.createNewPublicQueue
+
+GET    /getPatient/:queueId         controllers.HomeController.getFirstPatientInQueue(queueId)
+
+GET    /endQueue/:queueId           controllers.HomeController.closeChannel(queueId)

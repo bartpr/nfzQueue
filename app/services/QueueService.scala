@@ -92,7 +92,7 @@ class QueueService(){
     )
   }
 
-  def getMyPublicQueues(patient: Patient): Future[Seq[(ClinicQueue, Option[Ticket])]] = Future {
+  def getMyPublicQueues(patient: Patient): Future[Seq[(ClinicQueue, Option[Ticket], Option[Long])]] = Future {
     filterPublicMap(
       collection.immutable.Seq({
         val a = RPCQueueMap.values().asScala.toSeq
@@ -100,7 +100,7 @@ class QueueService(){
         b
       }: _*)
     ).map( RpcQueue =>
-      (RpcQueue.clinicQueue, RpcQueue.getCurrentTicket(None))
+      (RpcQueue.clinicQueue, RpcQueue.getCurrentTicket(None), RpcQueue.getMyNumber(patient))
     )
   }
 
@@ -116,6 +116,7 @@ class QueueService(){
   }
 
   def getMyQueue(doctor: Doctor): Future[Option[Long]] = Future {
+
     RPCQueueMap.values.asScala.find(_.clinicQueue.doctorsIds.head == doctor.userId).map(_.clinicQueue.id)
   }
 

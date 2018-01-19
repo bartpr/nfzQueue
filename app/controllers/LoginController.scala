@@ -13,16 +13,42 @@ import services.Users.{Doctor, Patient}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.Success
 
 
 
 
 case class LoginInfo(login: String, pass: String)
 
-case class QueueId(id: Long)
+case class QueueInfo(hours: Int)
 
 @Singleton
 class LoginController @Inject()(db: Database, cc: ControllerComponents, userServ: UserService, service: QueueService)(implicit exec: ExecutionContext, messagesAction: MessagesActionBuilder) extends AbstractController(cc) {
+
+  def createNewPublicQueue =
+    messagesAction.async { implicit request: MessagesRequest[AnyContent] =>
+      queueTicketForm.bindFromRequest.fold(
+        formWithErrors => {
+          Future(BadRequest(views.html.doctor_no_queue(formWithErrors)))
+        },
+        queueInfo =>
+          request.session.get("userId").map { user =>
+            for {
+              client <- userServ.getUser(user.toLong)
+            } yield {
+              client match {
+                case Some(patient: Patient) =>
+                  Future(Ok("Nie jestes doktorem"))
+                case Some(doctor: Doctor) =>
+                  service.getNewQueue(queueInfo.hours, Seq(doctor.userId)).flatMap(queue =>
+                    service.createNewQueue(queue).map(_.id)
+                  ).map(_ => Redirect(routes.LoginController.passwordChecker))
+                case _ => Future(Ok("Nie jesteś zalogowany"))
+              }
+            }
+          }.getOrElse(Future(Future(Ok("Nie jesteś zalogowany")))).flatten
+      )
+    }
 
   //option - none = no patient in doctor
   def getAllPublicQueues: Future[Seq[(ClinicQueue, Option[Ticket], Doctor)]] = {
@@ -36,18 +62,18 @@ class LoginController @Inject()(db: Database, cc: ControllerComponents, userServ
     }
   }
 
-  def getMyQueues(patient: Patient): Future[Seq[(ClinicQueue, Option[Ticket], Doctor)]] = {
+  def getMyQueues(patient: Patient): Future[Seq[(ClinicQueue, Option[Ticket], Doctor, Option[Long])]] = {
     for {
       queues <- service.getMyPublicQueues(patient)
       user <- Future.sequence(queues.map(elem => userServ.getUser(elem._1.doctorsIds.head).map(_.map(_.asInstanceOf[Doctor]).get)))
     } yield {
       (queues zip user).map( zipped =>
-        (zipped._1._1, zipped._1._2, zipped._2)
+        (zipped._1._1, zipped._1._2, zipped._2, zipped._1._3)
       )
     }
   }
 
-  def doctorView(doctor: Doctor): Future[Result] = {
+  def doctorView(doctor: Doctor)(implicit request: MessagesRequest[AnyContent]): Future[Result] = {
     def getAllPatientsInQueue(queueId: Long): Future[Seq[Ticket]] = {
       for {
         queues <- service.getAllPatientsIds(queueId)
@@ -55,7 +81,7 @@ class LoginController @Inject()(db: Database, cc: ControllerComponents, userServ
     }
 
     def getCurrentPatient(queueId: Long, doctor: Doctor):Future[Option[Ticket]] = {
-      service.getCurrentPatient(queueId, doctor) //todo: getPatientDataFormDatabase
+      service.getCurrentPatient(queueId, doctor)
     }
 
     for {
@@ -68,24 +94,21 @@ class LoginController @Inject()(db: Database, cc: ControllerComponents, userServ
         val ticketDataPair = allPatients zip allPatientsData
         val flaternDataPair = ticketDataPair.filter(_._2.isDefined).map(old => (old._1.ticketId, old._2.get))
       queueId.map(id => Ok(views.html.doctor_view(id)(currentPatientData)(flaternDataPair)))
-        .getOrElse(Ok(views.html.doctor_no_queue()))
+        .getOrElse(Ok(views.html.doctor_no_queue(queueTicketForm)))
     }
-
-
   }
 
+  val queueTicketForm = Form(
+    mapping(
+      "hours" -> number
+    )(QueueInfo.apply)(QueueInfo.unapply)
+  )
 
   val userForm = Form(
     mapping(
       "login" -> nonEmptyText,
       "pass" -> nonEmptyText
     )(LoginInfo.apply)(LoginInfo.unapply)
-  )
-
-  val queueTicketForm = Form(
-    mapping(
-      "queueId" -> longNumber
-    )(QueueId.apply)(QueueId.unapply)
   )
 
   private def resolvingUserQuery(username: String, password: String): Future[Option[Long]] = Future{
@@ -109,7 +132,8 @@ class LoginController @Inject()(db: Database, cc: ControllerComponents, userServ
       loggedId.map {
         _.map(userId =>
           Redirect(routes.LoginController.passwordChecker).withSession(
-            "userId" -> userId.toString)
+            "userId" -> userId.toString
+          )
         ).getOrElse(Ok(s"Hasło nie prawidłowe"))
       }
     }
@@ -125,10 +149,8 @@ class LoginController @Inject()(db: Database, cc: ControllerComponents, userServ
       }
     }
 
-
-
   def passwordChecker =
-    Action.async { request =>
+    messagesAction.async { implicit request: MessagesRequest[AnyContent] =>
       request.session.get("userId").map { user =>
         for{
           client <- userServ.getUser(user.toLong)

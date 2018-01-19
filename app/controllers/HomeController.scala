@@ -33,7 +33,7 @@ class HomeController @Inject()(db: Database, cc: ControllerComponents, service: 
   }
 
   def createNewPublicQueue(durationInHours: Int, doctor: Doctor): Future[Long] = {
-    service.getNewQueue(durationInHours, Seq(doctor.userId)).flatMap( queue =>
+    service.getNewQueue(durationInHours, Seq(doctor.userId)).flatMap(queue =>
       service.createNewQueue(queue).map(_.id)
     )
   }
@@ -48,7 +48,7 @@ class HomeController @Inject()(db: Database, cc: ControllerComponents, service: 
   def getNumber(queueId: String) =
     Action.async { request =>
     request.session.get("userId").map { user =>
-      for{
+      for {
         client <- userService.getUser(user.toLong)
       } yield {
         client match {
@@ -69,8 +69,44 @@ class HomeController @Inject()(db: Database, cc: ControllerComponents, service: 
     service.nextNumberToDoc(doctor, queueId)
   }
 
-  def closeChannel(queueId: Long): Future[Unit] = {
-    service.close(queueId)
+  //Option in none - queue empty
+  def getFirstPatientInQueue(queueId: String) =
+    Action.async { request =>
+      request.session.get("userId").map { user =>
+        for {
+          client <- userService.getUser(user.toLong)
+        } yield {
+          client match {
+            case Some(patient: Patient) =>
+              Future(Ok("Nie jesteś doktorem"))
+            case Some(doctor: Doctor) =>
+              service.nextNumberToDoc(doctor, queueId.toLong).map( _ =>
+                Redirect(routes.LoginController.passwordChecker)
+              )
+            case _ => Future(Ok("Nie jesteś zalogowany"))
+          }
+        }
+      }.getOrElse(Future(Future(Ok("Nie jesteś zalogowany")))).flatten
+    }
+
+  def closeChannel(queueId: String) = {
+    Action.async { request =>
+      request.session.get("userId").map { user =>
+        for {
+          client <- userService.getUser(user.toLong)
+        } yield {
+          client match {
+            case Some(patient: Patient) =>
+              Future(Ok("Nie jesteś doktorem"))
+            case Some(doctor: Doctor) =>
+              service.close(queueId.toLong).map( _ =>
+                Redirect(routes.LoginController.passwordChecker)
+              )
+            case _ => Future(Ok("Nie jesteś zalogowany"))
+          }
+        }
+      }.getOrElse(Future(Future(Ok("Nie jesteś zalogowany")))).flatten
+    }
   }
 
 //  def queues = Action.async {

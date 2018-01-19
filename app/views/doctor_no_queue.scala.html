@@ -1,8 +1,15 @@
 @import services.Queues.{ClinicQueue, Ticket}
 @import services.Users.User
+@import helper._
+
+@(userForm: Form[QueueInfo])(implicit request: MessagesRequestHeader)
 
 @main("Doctor Panel") {
 
-<p><a href="createNewQueue">Utwórz nową kolejkę</a></p>
+    @form(action = routes.LoginController.createNewPublicQueue) {
+        @CSRF.formField
+        @inputText(userForm("hours"))
+        <input type="submit" class="btn" value="Stwórz nową kolejkę">
+    }
 
 }

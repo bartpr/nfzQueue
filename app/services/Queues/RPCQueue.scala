@@ -24,19 +24,24 @@ class RPCQueue(val clinicQueue: ClinicQueue)(implicit system: ActorSystem, conne
 
   private val queueMap: ConcurrentLinkedQueue[(Long, ClientOwner)] = new ConcurrentLinkedQueue[(Long, ClientOwner)]()
 
-  private val currentPatient: ConcurrentMap[Doctor, Ticket] = new ConcurrentHashMap[Doctor, Ticket]()
+  private val currentPatient: ConcurrentMap[Long, Ticket] = new ConcurrentHashMap[Long, Ticket]()
 
   private val numbersInQueue = new IdStore()
 
   private var channelMq: Option[Channel] = None
+
+  def getMyNumber(clientOwner: ClientOwner): Option[Long] = {
+    queueMap.iterator().asScala.find(_._2.id == clientOwner.id).map(_._1)
+  }
 
   def getQueueMapWithClient(clientOwner: ClientOwner): Boolean =  {
     queueMap.iterator().asScala.exists(_._2.id == clientOwner.id)
   }
 
   def getCurrentTicket(doctorOpt: Option[Doctor]): Option[Ticket] = {
-    doctorOpt.map(doctor => Option(currentPatient.get(doctor)))
+    val a = doctorOpt.map(doctor => Option(currentPatient.get(doctor.id)))
       .getOrElse(currentPatient.values().asScala.headOption)
+    a
     //todo: when more doctors -> Option to Seq
   }
 
@@ -64,7 +69,8 @@ class RPCQueue(val clinicQueue: ClinicQueue)(implicit system: ActorSystem, conne
               val currElem = queueMap.poll()
               currElem match {
                 case (ticket, user: User) =>
-                  currentPatient.replace(doctor.asInstanceOf[Doctor], Ticket(ticket, user))
+                  currentPatient.putIfAbsent(doctor.id, Ticket(ticket, user))
+                  currentPatient.replace(doctor.id, Ticket(ticket, user))
                   System.out.println(s"[$name] Doctor get a patient" + user.userId)
                   Message.NextPatientIs(clinicQueue, Some(user.userId))
                 case _ => throw new IllegalStateException("only user can go to clinic")

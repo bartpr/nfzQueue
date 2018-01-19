@@ -1,7 +1,7 @@
 @import services.Queues.{ClinicQueue, Ticket}
 @import services.Users.Doctor
 
-@(myQueues: Seq[(ClinicQueue, Option[Ticket], Doctor)])(queues: Seq[(ClinicQueue, Option[Ticket], Doctor)])
+@(myQueues: Seq[(ClinicQueue, Option[Ticket], Doctor, Option[Long])])(queues: Seq[(ClinicQueue, Option[Ticket], Doctor)])
 
 
 @main("Queues") {
@@ -11,7 +11,7 @@
     <table class="table">
         <thead>
         <tr>
-            <th scope="col">Kolejka zaćzeła się</th>
+            <th scope="col">Kolejka zaczęła się</th>
             <th scope="col">Planowane zakończenie</th>
             <th scope="col">Imie doktora</th>
             <th scope="col">Nazwisko doktora</th>
@@ -27,8 +27,8 @@
             <td>@queue._1.end</td>
             <td>@queue._3.name</td>
             <td>@queue._3.surname</td>
-            <td>@queue._2.map(_.ticketId.toString).getOrElse("pusta")</td>
-            <td><a href="getTicket/@queue._1.id">Weź numerek</a></td>
+            <td>@queue._2.map(_.ticketId.toString).getOrElse("pusty gabinet")</td>
+            <td>@queue._4.getOrElse("utracono numerek")</td>
         </tr>
         }
 
